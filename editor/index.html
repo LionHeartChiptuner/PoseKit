@@ -1,0 +1,2332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GlovesTan3 PoseKit</title>
+<style>
+:root {
+  --bg: #f4f3ef; --panel: #ffffff; --panel-2: #f0eee8; --line: #dcd8ce; --text: #1f1d1a; --muted: #6b665c;
+  --accent: #b5651d; --accent-2: #0f7c86; --ok: #3c8a3f; --warn: #b3261e; --view: #e9e7e1; --grid: #c9c4b8;
+  --handR: #d9822b; --handL: #1795a3; --shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141412; --panel: #1c1c19; --panel-2: #24241f; --line: #34332d; --text: #ecebe6; --muted: #a09d93;
+    --accent: #e39a4b; --accent-2: #3cc2cf; --ok: #6cc06f; --warn: #ef6f66; --view: #191917; --grid: #3a3933;
+    --handR: #f0a052; --handL: #3cc2cf; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141412; --panel: #1c1c19; --panel-2: #24241f; --line: #34332d; --text: #ecebe6; --muted: #a09d93;
+  --accent: #e39a4b; --accent-2: #3cc2cf; --ok: #6cc06f; --warn: #ef6f66; --view: #191917; --grid: #3a3933;
+  --handR: #f0a052; --handL: #3cc2cf; --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+#app { display: grid; grid-template-columns: 290px 1fr 310px; height: 100vh; }
+aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 14px 40px; }
+aside.right { border-right: 0; border-left: 1px solid var(--line); }
+h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: .2px; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+.sub { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
+label { display: block; color: var(--muted); font-size: 12px; margin: 8px 0 3px; }
+input[type=text], input[type=number], select, textarea {
+  width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; font: inherit;
+}
+input[type=number] { padding: 4px 5px; }
+textarea { resize: vertical; min-height: 34px; }
+button {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; font: inherit; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button:disabled { opacity: .45; cursor: default; border-color: var(--line); }
+.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.row > * { flex: 1 1 auto; }
+.check { display: flex; gap: 7px; align-items: center; margin: 6px 0; color: var(--text); font-size: 13px; }
+.check input { margin: 0; }
+.note { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--muted); }
+.note.warn { border-color: var(--warn); color: var(--text); }
+.note b { color: var(--text); }
+ol.steps { padding-left: 18px; margin: 4px 0; color: var(--muted); font-size: 12px; }
+ol.steps li { margin: 3px 0; }
+code { font: 11.5px ui-monospace, Consolas, monospace; background: var(--panel-2); padding: 1px 4px; border-radius: 4px; color: var(--text); }
+#view { position: relative; background: var(--view); min-width: 0; }
+#view canvas { display: block; width: 100%; height: 100%; outline: none; }
+#hud { position: absolute; left: 12px; top: 10px; right: 12px; display: flex; gap: 8px; align-items: center; pointer-events: none; flex-wrap: wrap; }
+#hud > * { pointer-events: auto; }
+.pill { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; box-shadow: var(--shadow); font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--panel); box-shadow: var(--shadow); }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 4px 10px; font-size: 12px; }
+.seg button.on { background: var(--accent); color: #fff; }
+#trig { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; box-shadow: var(--shadow); max-width: 520px; }
+#trig input[type=range] { flex: 1; }
+#toast { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 6px 12px; border-radius: 8px; font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 80%; }
+#toast.show { opacity: .95; }
+#drop { position: absolute; inset: 0; border: 3px dashed var(--accent); background: color-mix(in srgb, var(--view) 70%, transparent); display: none; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; }
+#drop.show { display: flex; }
+.slots { display: grid; grid-template-columns: 74px 1fr 1fr; gap: 5px; align-items: stretch; }
+.slots .hdr { font-size: 11px; color: var(--muted); text-align: center; font-weight: 600; }
+.slots .lbl { font-size: 12px; color: var(--muted); align-self: center; }
+.slot { position: relative; text-align: left; padding: 6px 8px; font-size: 12px; }
+.slot .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line); margin-right: 6px; vertical-align: 0; }
+.slot.set .dot { background: var(--ok); }
+.slot.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.slot.unused { opacity: .55; }
+.fingers .f { display: grid; grid-template-columns: 62px 1fr 38px; gap: 6px; align-items: center; margin: 3px 0; font-size: 12px; }
+.fingers .f span:first-child { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fingers .f output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fingers .f.axis { grid-template-columns: 50px 1fr 38px; padding-left: 12px; margin: 1px 0; }
+.fingers .f.axis span:first-child { font-size: 11px; }
+.fingers .presets { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.fingers .presets button { padding: 3px 8px; font-size: 12px; flex: 1 1 auto; }
+.fingers .finger { border-top: 1px solid var(--line); padding: 2px 0; }
+.fingers .finger.open { background: var(--panel-2); border-radius: 6px; padding: 2px 4px 6px; }
+.fingers .fhead { display: grid; grid-template-columns: 18px 1fr; align-items: center; }
+.fingers .fhead .f { margin: 3px 0; grid-template-columns: 52px 1fr 38px; }
+.fingers .tog { border: 0; background: transparent; padding: 0; width: 18px; color: var(--muted); font-size: 11px; }
+.fingers .knuckle { margin: 6px 0 0 6px; }
+.fingers .link { border: 0; background: transparent; padding: 0; color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.fingers .link:hover { text-decoration: underline; }
+.fingers .f.master span:first-child { color: var(--text); }
+#jointCtl .f.axis { padding-left: 0; }
+.xyz { display: grid; grid-template-columns: 14px 1fr 14px 1fr 14px 1fr; gap: 4px; align-items: center; font-size: 11px; color: var(--muted); }
+.markers { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+.markers div { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 4px 6px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.markers div:last-child { border-bottom: 0; }
+.markers span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.markers button { padding: 2px 6px; font-size: 11px; flex: 0 0 auto; }
+.kbd { font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 300px; }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+.hidden { display: none !important; }
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  #app { grid-template-columns: 1fr; grid-template-rows: 60vh auto auto; height: auto; }
+  #view { order: -1; height: 60vh; }
+  aside, aside.right { border: 0; border-top: 1px solid var(--line); padding: 12px 16px 24px; overflow: visible; }
+}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app">
+  <aside class="left">
+    <h1>GlovesTan3 PoseKit</h1>
+    <p class="sub">Hand pose editor for the GlovesTan3 H3VR mod</p>
+
+    <div id="rigNote" class="note warn">
+      <b>Default hand rig.</b> Exported poses only line up in game after you load the real GlovesTan3 skeleton: open the wrist menu and press <b>PoseKit: Dump rig</b>, then import <code>rig.json</code>, or import any capture.
+    </div>
+
+    <h2>Files</h2>
+    <div class="row">
+      <button id="btnImport" title="rig.json, captures, exported pose sets or project files">Import…</button>
+      <button id="btnExport" class="primary" title="Pose set for BepInEx/config/GlovesTan3Poses">Export for game</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button id="btnSave">Save project</button>
+      <button id="btnNew">New</button>
+    </div>
+    <input id="file" type="file" accept=".json,application/json" multiple class="hidden">
+    <p class="sub" style="margin-top:6px">You can also drop files onto the viewport.</p>
+
+    <h2>Weapon</h2>
+    <label for="pName">Pose set name</label>
+    <input id="pName" type="text" placeholder="My Glock 17 poses">
+    <label for="pIds">Item IDs (comma separated)</label>
+    <input id="pIds" type="text" placeholder="Glock17">
+    <label for="pNames">Object names (optional)</label>
+    <input id="pNames" type="text" placeholder="Glock17(Clone)">
+    <div class="row" style="margin-top:8px">
+      <button id="btnAutoCopy" title="Give these poses to every gun with a very similar name (G17 → G18, G19, G17L…)">Auto copy to similar guns</button>
+      <button id="btnSimilar" style="flex:0 0 auto" title="See the similar guns and choose which ones get these poses">Review…</button>
+    </div>
+    <div class="check"><input id="pTrigger" type="checkbox" checked><label for="pTrigger" style="margin:0;color:inherit">Blend trigger finger (Fire start → end)</label></div>
+
+    <h2>H3VR game link</h2>
+    <p class="sub">Load gun models, the hand rig and captures straight from the running game (needs the PoseKit plugin).</p>
+    <div class="row">
+      <input id="gPort" type="number" min="1" max="65535" value="48261" title="Port from gt3posekit.loader.cfg" style="flex:0 0 80px">
+      <button id="btnConnect">Connect</button>
+    </div>
+    <div id="gStatus" class="sub" style="margin-top:6px">Not connected.</div>
+    <div id="gPanel" class="hidden">
+      <div class="row" style="margin-top:4px">
+        <button id="btnSend" class="primary" title="Apply these poses in the game now and save them into the pose folder">Send to game</button>
+      </div>
+      <div class="check"><input id="liveSync" type="checkbox"><label for="liveSync" style="margin:0;color:inherit">Live sync: every edit shows up in game</label></div>
+      <div id="liveStatus" class="sub"></div>
+      <label for="syncRepo">Shared poses (GitHub repository)</label>
+      <div class="row">
+        <input id="syncRepo" type="text" value="LionHeartChiptuner/PoseKit-Poses" spellcheck="false" style="flex:1 1 60%">
+      </div>
+      <button id="btnSyncRepo" style="width:100%;margin-top:6px" title="Download the latest pose files from the repository's main folder into the game">Sync with GitHub repo</button>
+      <div id="syncStatus" class="sub" style="margin-top:4px"></div>
+      <div class="row" style="margin-top:4px">
+        <button id="btnGetRig" title="Pull the GlovesTan3 hand skeleton from the game">Get rig</button>
+        <button id="btnCapL" title="Capture the left hand on what it holds">Capture L</button>
+        <button id="btnCapR" title="Capture the right hand on what it holds">Capture R</button>
+      </div>
+      <label for="gSearch">Find a model</label>
+      <div class="row">
+        <input id="gSearch" type="text" placeholder="Name or item ID" style="flex:1 1 60%">
+        <select id="gCat" style="flex:1 1 40%"></select>
+      </div>
+      <div id="gList" class="markers" style="margin-top:6px"></div>
+      <div id="gCount" class="sub" style="margin-top:4px"></div>
+    </div>
+
+    <h2>Reference markers</h2>
+    <div id="markerList" class="markers"><div><span class="sub" style="margin:0">Import a capture to see the gun's grab points, trigger and other parts.</span></div></div>
+
+    <h2>View</h2>
+    <div class="check"><input id="vGhost" type="checkbox" checked><label for="vGhost" style="margin:0;color:inherit">Show other hand (ghost)</label></div>
+    <div class="check"><input id="vMesh" type="checkbox" checked><label for="vMesh" style="margin:0;color:inherit">Gun meshes</label></div>
+    <div class="check"><input id="vCol" type="checkbox"><label for="vCol" style="margin:0;color:inherit">Gun colliders</label></div>
+    <div class="check"><input id="vMark" type="checkbox" checked><label for="vMark" style="margin:0;color:inherit">Markers</label></div>
+    <div class="check"><input id="vGlove" type="checkbox" checked><label for="vGlove" style="margin:0;color:inherit">Glove model</label></div>
+    <div class="check"><input id="vBones" type="checkbox"><label for="vBones" style="margin:0;color:inherit">Bones inside the glove</label></div>
+    <div class="check"><input id="vAxes" type="checkbox" checked><label for="vAxes" style="margin:0;color:inherit">Joint axes on selection</label></div>
+    <div class="row" style="margin-top:6px">
+      <button id="btnFrame">Frame gun</button>
+      <button id="btnFrameHand">Frame hand</button>
+    </div>
+
+    <h2>Workflow</h2>
+    <ol class="steps">
+      <li>Install the PoseKit plugin next to GlovesTan3.</li>
+      <li>In game, spawn the gloves, hold the gun and press <b>PoseKit: Capture L/R</b> (or <span class="kbd">F5</span>/<span class="kbd">F6</span>).</li>
+      <li>Import the capture from <code>BepInEx/config/GlovesTan3Poses/captures</code>.</li>
+      <li>Refine each slot here, then <b>Export for game</b> into <code>BepInEx/config/GlovesTan3Poses</code>.</li>
+      <li>Press <b>PoseKit: Reload poses</b> (<span class="kbd">F7</span>) and grab the gun again.</li>
+    </ol>
+  </aside>
+
+  <main id="view">
+    <div id="hud">
+      <span class="pill" id="hudSlot">IdleR</span>
+      <span class="seg" id="modeSeg">
+        <button data-mode="rotate" class="on" title="Rotate the selected joint (E)">Rotate joint</button>
+        <button data-mode="move" title="Move the whole hand (W)">Move hand</button>
+        <button data-mode="turn" title="Turn the whole hand around the selected joint, or the wrist (R)">Turn hand</button>
+      </span>
+      <span class="seg" id="spaceSeg">
+        <button data-space="local" class="on" title="Gizmo in local space (Q toggles)">Local</button>
+        <button data-space="world" title="Gizmo in gun space (Q toggles)">Gun</button>
+      </span>
+      <span class="pill" style="color:var(--muted)">Click a joint · <span class="kbd">E</span> rotate · <span class="kbd">W</span> move hand · <span class="kbd">R</span> turn hand · <span class="kbd">Ctrl</span>+<span class="kbd">Z</span> undo</span>
+    </div>
+    <div id="trig">
+      <label class="check" style="margin:0;white-space:nowrap"><input id="trigOn" type="checkbox"> Trigger preview</label>
+      <input id="trigVal" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      <output id="trigOut" style="width:34px;text-align:right;color:var(--muted)">0.00</output>
+    </div>
+    <div id="toast"></div>
+    <div id="drop">Drop rig, capture, pose set or project files</div>
+  </main>
+
+  <aside class="right">
+    <h2 style="margin-top:4px">Editing</h2>
+    <select id="targetSel" title="What the hand is holding"></select>
+    <p id="partHint" class="sub" style="margin-top:4px">Load the gun's model from the game (or a capture) to pose its slide, bolt or charging handle.</p>
+    <div id="magBox" class="hidden">
+      <label for="mTypes">Magazine types (matches every magazine of that type)</label>
+      <input id="mTypes" type="text" placeholder="e.g. Glock_Standard">
+      <label for="mIds">Magazine item IDs (optional)</label>
+      <input id="mIds" type="text" placeholder="MagazineGlock17">
+      <button id="btnLoadMag" class="hidden" style="margin-top:6px;width:100%">Load a compatible magazine's model</button>
+    </div>
+
+    <h2>Pose slots</h2>
+    <div class="slots" id="slots"></div>
+    <p class="sub" style="margin-top:6px" id="slotNote"></p>
+
+    <div class="row" style="margin-top:8px">
+      <button id="btnRest" title="Reset this slot to the rig's rest pose">Reset</button>
+      <button id="btnClear" title="Remove this slot from the export">Clear</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <select id="copyFrom"></select>
+      <button id="btnCopy" style="flex:0 0 auto">Copy</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button id="btnMirror" title="Mirror the other hand's version of this slot across the gun's centre plane">Mirror from other hand</button>
+    </div>
+
+    <h2>Fingers</h2>
+    <div class="fingers" id="fingers"></div>
+    <div class="check"><input id="limitRange" type="checkbox"><label for="limitRange" style="margin:0;color:inherit">Limit to natural range</label></div>
+    <div class="check"><input id="coupleTip" type="checkbox"><label for="coupleTip" style="margin:0;color:inherit">Tip follows middle knuckle</label></div>
+    <div class="check"><input id="curlFlip" type="checkbox"><label for="curlFlip" style="margin:0;color:inherit">Flip curl direction for this hand</label></div>
+    <div class="row" style="margin-top:4px">
+      <label for="nudgeStep" style="margin:0;flex:0 0 auto">Keyboard step</label>
+      <select id="nudgeStep" style="flex:0 0 90px">
+        <option value="0.5">0.5° / mm</option><option value="1">1° / mm</option><option value="2">2° / mm</option><option value="5">5° / mm</option><option value="10">10° / mm</option>
+      </select>
+    </div>
+
+    <h2>Selection</h2>
+    <div id="selInfo" class="sub">Nothing selected. Click a joint, or the square at the hand root.</div>
+    <div id="selEdit" class="hidden">
+      <div id="jointCtl" class="fingers hidden"></div>
+      <p id="kbdHint" class="sub" style="margin:6px 0 0"></p>
+      <label>Rotation (Unity local euler, °)</label>
+      <div class="xyz">
+        <span>X</span><input id="eX" type="number" step="1">
+        <span>Y</span><input id="eY" type="number" step="1">
+        <span>Z</span><input id="eZ" type="number" step="1">
+      </div>
+      <div id="posEdit">
+        <label>Position (gun space, mm)</label>
+        <div class="xyz">
+          <span>X</span><input id="pX" type="number" step="1">
+          <span>Y</span><input id="pY" type="number" step="1">
+          <span>Z</span><input id="pZ" type="number" step="1">
+        </div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btnJointReset">Reset joint</button>
+        <button id="btnSelParent">Select parent</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<dialog id="syncDlg">
+  <form method="dialog" style="max-width:480px">
+    <h1 style="margin-bottom:6px">Sync with GitHub repo</h1>
+    <p class="sub" id="syncInfo"></p>
+    <div id="syncList" class="markers" style="max-height:340px"></div>
+    <div class="row" style="margin-top:12px; justify-content:flex-end">
+      <button value="cancel" style="flex:0 0 auto">Cancel</button>
+      <button value="ok" class="primary" style="flex:0 0 auto">Download ticked</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="simDlg">
+  <form method="dialog" style="max-width:440px">
+    <h1 style="margin-bottom:6px">Similar guns</h1>
+    <p class="sub" id="simInfo"></p>
+    <div id="simList" class="markers" style="max-height:320px"></div>
+    <label for="simMin">Minimum similarity: <output id="simMinOut">0.80</output></label>
+    <input id="simMin" type="range" min="0.5" max="1" step="0.05" value="0.8" style="width:100%">
+    <div class="row" style="margin-top:12px; justify-content:flex-end">
+      <button value="cancel" style="flex:0 0 auto">Cancel</button>
+      <button value="ok" class="primary" style="flex:0 0 auto">Add ticked guns</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="capDlg">
+  <form method="dialog">
+    <h1 style="margin-bottom:6px">Apply capture</h1>
+    <p class="sub" id="capInfo"></p>
+    <label for="capSlot">Put this pose into slot</label>
+    <select id="capSlot"></select>
+    <div class="check"><input id="capGeo" type="checkbox" checked><label for="capGeo" style="margin:0;color:inherit">Use the capture's gun geometry and markers</label></div>
+    <div class="check"><input id="capMatch" type="checkbox" checked><label id="capMatchLbl" for="capMatch" style="margin:0;color:inherit">Add its item ID to this pose set</label></div>
+    <div class="row" style="margin-top:12px; justify-content:flex-end">
+      <button value="cancel" style="flex:0 0 auto">Cancel</button>
+      <button value="ok" class="primary" style="flex:0 0 auto">Apply</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+// ============================================================ constants & helpers
+const SLOT_ROWS = [['Idle','Idle'], ['Fore','Foregrip'], ['FireStart','Fire start'], ['FireEnd','Fire end']];
+const SLOTS = SLOT_ROWS.flatMap(([k]) => [k + 'L', k + 'R']);
+const SIDE = s => s.slice(-1);
+const OTHER = s => s.slice(0, -1) + (SIDE(s) === 'L' ? 'R' : 'L');
+const $ = id => document.getElementById(id);
+const STORE_KEY = 'gt3posekit.project.v1';
+
+// Unity is left-handed, three.js right-handed. Flipping Z is its own inverse, so one pair of
+// functions converts in both directions.
+const cvP = a => [a[0], a[1], -a[2]];
+const cvQ = a => [-a[0], -a[1], a[2], a[3]];
+const V = a => new THREE.Vector3().fromArray(a);
+const Q = a => new THREE.Quaternion().fromArray(a).normalize();
+const round = (x, n = 6) => Math.round(x * 10 ** n) / 10 ** n;
+const arr = v => v.toArray().map(x => round(x));
+const clone = o => JSON.parse(JSON.stringify(o));
+
+// ============================================================ default rig (placeholder until the real one is imported)
+function defaultRig(side) {
+  // A generic palm-down right hand, fingers along -Z (Unity +Z), thumb toward -X.
+  const joints = [{ name: 'Wrist', parent: -1, p: [0, 0, 0], q: [0, 0, 0, 1] }];
+  const fingers = [
+    ['Thumb', [-0.025, -0.012, -0.028], [-0.62, -0.15, -0.77], [0.040, 0.032, 0.027]],
+    ['Index', [-0.024, 0, -0.092], [0, 0, -1], [0.044, 0.026, 0.021]],
+    ['Middle', [-0.004, 0, -0.096], [0, 0, -1], [0.049, 0.029, 0.023]],
+    ['Ring', [0.015, 0, -0.091], [0.05, 0, -1], [0.045, 0.028, 0.022]],
+    ['Pinky', [0.032, -0.002, -0.081], [0.12, 0, -1], [0.035, 0.021, 0.018]],
+  ];
+  for (const [name, base, dir, lens] of fingers) {
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), V(dir).normalize());
+    let parent = 0;
+    for (let k = 0; k < 3; k++) {
+      const p = k === 0 ? base : [0, 0, -lens[k - 1]];
+      joints.push({ name: name + (k + 1), parent, p, q: k === 0 ? arr(q) : [0, 0, 0, 1] });
+      parent = joints.length - 1;
+    }
+  }
+  const rig = { side: 'R', rootName: 'Hand', joints, source: 'default' };
+  return side === 'R' ? rig : mirrorRig(rig, 'L');
+}
+function mirrorRig(rig, side) {
+  // Mirror across the X plane; positions flip x, rotations reflect (x,-y,-z,w).
+  return {
+    ...rig, side,
+    joints: rig.joints.map(j => ({ ...j, p: [-j.p[0], j.p[1], j.p[2]], q: [j.q[0], -j.q[1], -j.q[2], j.q[3]] })),
+  };
+}
+function rigFromUnity(rh, source) {
+  return {
+    side: rh.side, rootName: rh.rootName || 'Hand', source,
+    joints: rh.joints.map(j => ({ name: j.name, parent: j.parent, p: cvP(j.local.p), q: cvQ(j.local.r) })),
+  };
+}
+
+// ============================================================ rig analysis (rest pose, finger chains, curl axes)
+function analyseRig(rig) {
+  const n = rig.joints.length;
+  const children = rig.joints.map(() => []);
+  const rootKids = [];
+  rig.joints.forEach((j, i) => (j.parent >= 0 ? children[j.parent] : rootKids).push(i));
+  const order = []; // parents before children
+  const visit = i => { order.push(i); children[i].forEach(visit); };
+  rootKids.forEach(visit);
+
+  const rest = rig.joints.map(j => Q(j.q));
+  const { wp, wq } = fkRaw(rig, order, new THREE.Vector3(), new THREE.Quaternion(), rest);
+
+  // A chain starts at a joint whose parent branches (or is the root) and follows single-child links.
+  const chains = [];
+  for (const i of order) {
+    const par = rig.joints[i].parent;
+    const sibs = par >= 0 ? children[par] : rootKids;
+    if (par >= 0 && sibs.length === 1) continue;
+    const chain = [i];
+    let c = i;
+    while (children[c].length === 1) { c = children[c][0]; chain.push(c); }
+    if (chain.length >= 2) chains.push(chain);
+  }
+  // Finger roles: from joint names when the rig has them, otherwise by distance from the thumb.
+  const lname = i => rig.joints[i].name.toLowerCase();
+  const find = re => chains.find(ch => ch.some(i => re.test(lname(i))));
+  let thumb = find(/thumb/) || null;
+  if (!thumb && chains.length >= 5) {
+    // No names: the thumb is the chain whose base sits furthest from the others.
+    const spreadOf = ch => chains.reduce((s, o) => s + (o === ch ? 0 : wp[o[0]].distanceTo(wp[ch[0]])), 0);
+    thumb = chains.slice().sort((a, b) => spreadOf(b) - spreadOf(a))[0];
+  }
+  const others = chains.filter(c => c !== thumb);
+  const named = { index: find(/index|point|fore/), middle: find(/middle|mid/), ring: find(/ring/), pinky: find(/pinky|little|small/) };
+  const byDist = thumb ? others.slice().sort((a, b) => wp[a[0]].distanceTo(wp[thumb[0]]) - wp[b[0]].distanceTo(wp[thumb[0]])) : others;
+  const ROLE = ['index', 'middle', 'ring', 'pinky'];
+  const roleOf = ch => {
+    if (ch === thumb) return 'thumb';
+    for (const r of ROLE) if (named[r] === ch) return r;
+    return ROLE[byDist.indexOf(ch)] || 'other';
+  };
+  const order5 = ['thumb', ...ROLE, 'other'];
+  const fingers = chains.map(ch => ({
+    joints: ch,
+    role: roleOf(ch),
+    isThumb: ch === thumb,
+  }));
+  fingers.forEach(f => { f.label = f.role === 'other' ? niceName(rig.joints[f.joints[0]].name) : f.role[0].toUpperCase() + f.role.slice(1); });
+  fingers.sort((a, b) => order5.indexOf(a.role) - order5.indexOf(b.role));
+  const index = fingers.find(f => f.role === 'index')?.joints;
+  const pinky = fingers.find(f => f.role === 'pinky')?.joints || others[others.length - 1];
+
+  // Palm normal: points out of the palm for the right hand; mirrored for the left.
+  const wrist = new THREE.Vector3();
+  rootKids.forEach(i => wrist.add(wp[i])); wrist.divideScalar(Math.max(1, rootKids.length));
+  let N = new THREE.Vector3(0, -1, 0);
+  if (index && pinky && index !== pinky) {
+    const a = wp[index[0]].clone().sub(wrist), b = wp[pinky[0]].clone().sub(wrist);
+    const c = new THREE.Vector3().crossVectors(a, b);
+    if (c.lengthSq() > 1e-10) N = c.normalize();
+  }
+  if (rig.side === 'L') N.negate();
+
+  // Per finger joint, a local frame whose axes are curl (x), spread (y) and twist (z, along the bone).
+  // Every joint rotation can then be read back as curl/spread/twist angles, so sliders and the gizmo agree.
+  const basis = new Array(n).fill(null);
+  const jointInfo = new Array(n).fill(null);
+  for (const f of fingers) {
+    const L = f.joints.length;
+    f.joints.forEach((i, k) => {
+      const next = f.joints[k + 1], prev = f.joints[k - 1];
+      const d = next != null ? wp[next].clone().sub(wp[i]) : wp[i].clone().sub(wp[prev]);
+      d.normalize();
+      let a = new THREE.Vector3().crossVectors(d, N);
+      if (a.lengthSq() < 1e-8) a.set(1, 0, 0);
+      a.normalize();
+      const s = new THREE.Vector3().crossVectors(a, d).normalize(); // palm normal, made perpendicular to the bone
+      const inv = wq[i].clone().invert();
+      const al = a.applyQuaternion(inv), sl = s.applyQuaternion(inv), tl = d.clone().negate().applyQuaternion(inv);
+      basis[i] = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(al, sl, tl));
+      // Which knuckle this is, counted from the tip: chains longer than 3 start with a stiff metacarpal.
+      const fromTip = L - 1 - k;
+      const knuckle = fromTip >= 3 ? 'meta' : ['tip', 'mid', 'base'][fromTip];
+      jointInfo[i] = { finger: f, k, knuckle };
+    });
+  }
+  return { n, children, rootKids, order, rest, restWp: wp, restWq: wq, fingers, basis, jointInfo };
+}
+
+// ---------- curl / spread / twist <-> joint rotation
+// q = rest * B * R_yzx(curl, spread, twist) * B^-1, with B the joint's curl/spread/twist frame.
+// The YZX order puts twist (always small) in the middle, so curl can pass 90° without gimbal lock.
+const DEG = Math.PI / 180;
+function readJoint(side, i, q) {
+  const { info, rig } = RIG[side];
+  const B = info.basis[i];
+  if (!B) return null;
+  const delta = Q(rig.joints[i].q).invert().multiply(Q(q));
+  const dB = B.clone().invert().multiply(delta).multiply(B);
+  const e = new THREE.Euler().setFromQuaternion(dB, 'YZX');
+  const sign = project.curlFlip[side] ? -1 : 1;
+  return { curl: e.x / DEG * sign, spread: e.y / DEG, twist: e.z / DEG };
+}
+function writeJoint(side, i, v) {
+  const { info, rig } = RIG[side];
+  const B = info.basis[i];
+  const sign = project.curlFlip[side] ? -1 : 1;
+  const dB = new THREE.Quaternion().setFromEuler(new THREE.Euler(v.curl * DEG * sign, v.spread * DEG, v.twist * DEG, 'YZX'));
+  return arr(Q(rig.joints[i].q).multiply(B).multiply(dB).multiply(B.clone().invert()).normalize());
+}
+// Natural ranges used when "Limit to natural range" is on.
+const LIMITS = {
+  meta: { curl: [-5, 25], spread: [-10, 10], twist: [-10, 10] },
+  base: { curl: [-30, 95], spread: [-30, 30], twist: [-20, 20] },
+  mid: { curl: [-5, 110], spread: [-8, 8], twist: [-15, 15] },
+  tip: { curl: [-15, 90], spread: [-8, 8], twist: [-15, 15] },
+  thumbbase: { curl: [-30, 70], spread: [-45, 45], twist: [-60, 60] },
+};
+const FREE = { curl: [-180, 180], spread: [-180, 180], twist: [-180, 180] };
+function limitsFor(side, i) {
+  if (!project.limitRange) return FREE;
+  const ji = RIG[side].info.jointInfo[i];
+  if (!ji) return FREE;
+  if (ji.finger.isThumb && ji.knuckle !== 'mid' && ji.knuckle !== 'tip') return LIMITS.thumbbase;
+  return LIMITS[ji.knuckle];
+}
+const clampTo = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
+function niceName(s, forced) {
+  if (forced) return forced;
+  return s.replace(/[_\-.]?(0?1|_?base|proximal|_?a)$/i, '').replace(/^(hand|finger|l_|r_|left|right)[_\s-]*/i, '') || s;
+}
+
+// Forward kinematics. Returns gun-space world transforms of every joint.
+function fkRaw(rig, order, rootP, rootQ, locals) {
+  const wp = [], wq = [];
+  for (const i of order) {
+    const j = rig.joints[i];
+    const pp = j.parent >= 0 ? wp[j.parent] : rootP;
+    const pq = j.parent >= 0 ? wq[j.parent] : rootQ;
+    wp[i] = V(j.p).applyQuaternion(pq).add(pp);
+    wq[i] = pq.clone().multiply(locals[i]);
+  }
+  return { wp, wq };
+}
+function fk(side, pose) {
+  const r = RIG[side];
+  return fkRaw(r.rig, r.info.order, V(pose.root.p), Q(pose.root.q), pose.local.map(Q));
+}
+// Inverse of fk: gun-space joint transforms -> root + local rotations for this side's rig.
+function poseFromWorld(side, wp, wq, rootXf) {
+  const { rig, info } = RIG[side];
+  let rootP, rootQ;
+  if (rootXf) { rootP = rootXf.p.clone(); rootQ = rootXf.q.clone(); }
+  else {
+    const r = info.rootKids[0];
+    const j = rig.joints[r];
+    rootQ = wq[r].clone().multiply(Q(j.q).invert());
+    rootP = wp[r].clone().sub(V(j.p).applyQuaternion(rootQ));
+  }
+  const local = rig.joints.map((j, i) => {
+    const pq = j.parent >= 0 ? wq[j.parent] : rootQ;
+    return arr(pq.clone().invert().multiply(wq[i]).normalize());
+  });
+  return { root: { p: arr(rootP), q: arr(rootQ.normalize()) }, local, sliders: {} };
+}
+
+// ============================================================ state
+let project = null;
+const RIG = { L: null, R: null };
+let activeSlot = 'IdleR';
+let target = 'gun'; // 'gun' | 'mag' | 'part:<path>'
+let selected = null; // { side, index } ; index -1 = hand root
+const undoStack = [];
+
+function newProject() {
+  return {
+    format: 'gt3proj', version: 1,
+    name: '', itemIds: '', objectNames: '', hasTrigger: true,
+    rig: { L: defaultRig('L'), R: defaultRig('R') },
+    geo: null, curlFlip: { L: false, R: false },
+    limitRange: true, coupleTip: false, nudgeStep: 2,
+    poses: {},   // gun poses
+    parts: [],   // [{ path, name, type, rest: {p, r} (Unity, gun space), poses: {} }]
+    mag: { itemIds: '', magTypes: '', geo: null, name: '', poses: {} },
+    pump: { rest: null, poses: {} }, // the forward pump: rest = its frame in gun space (Unity), poses relative to it
+    compatMags: [],
+  };
+}
+
+// ---------- targets: the gun, its grabbable parts (slide, bolt…), or its magazines
+const RACK_RE = /slide|bolt|handle|charg|pump|fore.?end|lever|crank|cock/i;
+const partKey = path => 'part:' + path;
+const partOf = (t = target) => t.startsWith('part:') ? project.parts.find(p => p.path === t.slice(5)) : null;
+function TP(t = target) {
+  if (t === 'gun') return project.poses;
+  if (t === 'mag') return project.mag.poses;
+  if (t === 'pump') return project.pump.poses;
+  return partOf(t)?.poses || {};
+}
+const targetSlots = (t = target) => t === 'gun' ? SLOTS : ['IdleL', 'IdleR'];
+function allPoseDicts() { return [project.poses, project.mag.poses, project.pump.poses, ...project.parts.map(p => p.poses)]; }
+// The pump's frame at rest: from the gun model when loaded, else from the capture that posed it.
+const pumpInfo = () => project.geo?.pump?.path ? project.geo.pump : null;
+function pumpFrame() {
+  const xf = pumpInfo()?.xf || project.pump.rest;
+  return partFrame(xf ? { rest: xf } : null);
+}
+// Geometry shown for a target: the magazine has its own model; parts are shown on the gun.
+const viewGeo = () => target === 'mag' ? project.mag.geo : project.geo;
+// A part's pose frame (gun space, three.js coords) at rest.
+function partFrame(part) {
+  const r = part?.rest || { p: [0, 0, 0], r: [0, 0, 0, 1] };
+  return { p: V(cvP(r.p)), q: Q(cvQ(r.r)) };
+}
+function ensurePart(info) {
+  let p = project.parts.find(x => x.path === info.path);
+  if (!p) {
+    p = { path: info.path, name: info.name || info.path.split('/').pop(), type: info.type || '', rest: info.xf ? clone(info.xf) : { p: [0, 0, 0], r: [0, 0, 0, 1] }, poses: {} };
+    project.parts.push(p);
+  }
+  return p;
+}
+
+function setRig(side, rig) {
+  project.rig[side] = rig;
+  RIG[side] = { rig, info: analyseRig(rig) };
+  // Drop poses whose joint count no longer matches this rig.
+  for (const dict of allPoseDicts()) for (const s of SLOTS) {
+    if (SIDE(s) === side && dict[s] && dict[s].local.length !== rig.joints.length) delete dict[s];
+  }
+}
+function restPose(side) {
+  const { rig } = RIG[side];
+  const other = TP()['Idle' + side];
+  return {
+    root: other ? clone(other.root) : { p: [0, 0, 0], q: [0, 0, 0, 1] },
+    local: rig.joints.map(j => j.q.slice()),
+    sliders: {},
+  };
+}
+function curPose(create = true) {
+  const dict = TP();
+  if (!dict[activeSlot] && create) dict[activeSlot] = restPose(SIDE(activeSlot));
+  return dict[activeSlot];
+}
+
+let saveTimer = 0;
+function persist() {
+  scheduleLivePush(); // every edit ends in persist(), so this is where live sync hooks in
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(project)); }
+    catch {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...project, geo: null, glove: null, mag: { ...project.mag, geo: null } })); } catch { /* storage unavailable */ }
+    }
+  }, 300);
+}
+function pushUndo() {
+  const dict = TP();
+  undoStack.push({ target, slot: activeSlot, pose: dict[activeSlot] ? clone(dict[activeSlot]) : null });
+  if (undoStack.length > 200) undoStack.shift();
+}
+function undo() {
+  const u = undoStack.pop();
+  if (!u) return toast('Nothing to undo');
+  const dict = TP(u.target);
+  if (u.pose) dict[u.slot] = u.pose; else delete dict[u.slot];
+  if (u.target !== target) setTarget(u.target, true);
+  activeSlot = u.slot;
+  refreshAll();
+}
+
+// ============================================================ scene
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+view.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.002, 50);
+camera.position.set(0.35, 0.22, 0.45);
+const orbit = new OrbitControls(camera, renderer.domElement);
+orbit.enableDamping = true; orbit.dampingFactor = 0.15;
+orbit.target.set(0, 0, 0);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x666655, 2.2));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(1, 2, 1.5); scene.add(sun);
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let grid = null;
+function buildGrid() {
+  if (grid) scene.remove(grid);
+  grid = new THREE.GridHelper(1, 20, css('--grid'), css('--grid'));
+  grid.material.transparent = true; grid.material.opacity = 0.6;
+  grid.position.y = -0.15;
+  scene.add(grid);
+  scene.background = new THREE.Color(css('--view'));
+}
+buildGrid();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { buildGrid(); rebuildHands(); });
+
+const gunAxes = new THREE.AxesHelper(0.05); scene.add(gunAxes);
+const gunGroup = new THREE.Group(); scene.add(gunGroup);
+const meshGroup = new THREE.Group(), colGroup = new THREE.Group(), markGroup = new THREE.Group();
+gunGroup.add(meshGroup, colGroup, markGroup);
+// Hands live in the current target's frame: identity for the gun and magazine, the part's rest frame for a part.
+const targetFrame = new THREE.Group(); scene.add(targetFrame);
+const frameAxes = new THREE.AxesHelper(0.03); frameAxes.material.depthTest = false; frameAxes.renderOrder = 9;
+targetFrame.add(frameAxes);
+
+const tc = new TransformControls(camera, renderer.domElement);
+tc.setSize(0.7);
+tc.setSpace('local');
+scene.add(tc);
+tc.addEventListener('dragging-changed', e => {
+  orbit.enabled = !e.value;
+  if (e.value) pushUndo();
+  else if (tc.object === handProxy) attachGizmo(); // re-centre the proxy on the pivot for the next drag
+});
+tc.addEventListener('objectChange', onGizmoChange);
+
+function resize() {
+  const r = view.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width / Math.max(1, r.height);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(view);
+
+// ---------- placeholder gun (shown until a capture provides real geometry)
+function placeholderGun() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7d7a72, roughness: 0.8, transparent: true, opacity: 0.55 });
+  const box = (w, h, d, x, y, z, rx = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z); m.rotation.x = rx; g.add(m);
+  };
+  box(0.03, 0.035, 0.19, 0, 0.02, -0.06);        // slide (forward = -Z in three = +Z in Unity)
+  box(0.028, 0.10, 0.034, 0, -0.04, 0.015, 0.28); // grip
+  box(0.006, 0.02, 0.012, 0, -0.008, -0.03);      // trigger
+  g.userData.placeholder = true;
+  return g;
+}
+
+// ---------- gun geometry from a capture (Unity coords -> three)
+function buildGeo() {
+  for (const grp of [meshGroup, colGroup, markGroup]) {
+    while (grp.children.length) { const c = grp.children.pop(); c.traverse(o => { o.geometry?.dispose(); }); }
+  }
+  const geo = viewGeo();
+  if (!geo) { if (target !== 'mag') meshGroup.add(placeholderGun()); renderMarkers(); return; }
+  const meshMat = new THREE.MeshStandardMaterial({ color: 0x8b877d, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+  for (const m of geo.meshes || []) {
+    const v = new Float32Array(m.v.length);
+    for (let i = 0; i < m.v.length; i += 3) { v[i] = m.v[i]; v[i + 1] = m.v[i + 1]; v[i + 2] = -m.v[i + 2]; }
+    const t = new Uint32Array(m.t.length);
+    for (let i = 0; i < m.t.length; i += 3) { t[i] = m.t[i]; t[i + 1] = m.t[i + 2]; t[i + 2] = m.t[i + 1]; } // reflection flips winding
+    const bg = new THREE.BufferGeometry();
+    bg.setAttribute('position', new THREE.BufferAttribute(v, 3));
+    bg.setIndex(new THREE.BufferAttribute(t, 1));
+    bg.computeVertexNormals();
+    meshGroup.add(new THREE.Mesh(bg, meshMat));
+  }
+  // Parts the game won't let us read come as their bounding boxes: draw them as solid blocks.
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0x8b877d, roughness: 0.85, side: THREE.DoubleSide, transparent: true, opacity: 0.7, depthWrite: false });
+  const boxEdge = new THREE.LineBasicMaterial({ color: 0x5f5b52, transparent: true, opacity: 0.6 });
+  for (const p of geo.prims || []) {
+    if (p.kind !== 'meshbox') continue;
+    const g = new THREE.BoxGeometry(...p.size);
+    g.translate(...(p.center || [0, 0, 0]));
+    const inner = new THREE.Group();
+    inner.position.fromArray(p.xf.p); inner.quaternion.fromArray(p.xf.r);
+    if (p.scale) inner.scale.fromArray(p.scale);
+    inner.add(new THREE.Mesh(g, boxMat), new THREE.LineSegments(new THREE.EdgesGeometry(g), boxEdge));
+    const holder = new THREE.Group();
+    holder.scale.set(1, 1, -1);
+    holder.add(inner);
+    meshGroup.add(holder);
+  }
+  const colMat = new THREE.LineBasicMaterial({ color: css('--accent-2'), transparent: true, opacity: 0.7 });
+  const trigMat = new THREE.LineBasicMaterial({ color: css('--muted'), transparent: true, opacity: 0.35 });
+  for (const p of geo.prims || []) {
+    if (p.kind === 'meshbox') continue;
+    let g;
+    const c = p.center || [0, 0, 0];
+    if (p.kind === 'box' || p.kind === 'bounds') g = new THREE.BoxGeometry(...(p.size || [0.01, 0.01, 0.01]));
+    else if (p.kind === 'sphere') g = new THREE.SphereGeometry(p.radius, 12, 8);
+    else if (p.kind === 'capsule') {
+      g = new THREE.CapsuleGeometry(p.radius, Math.max(0, p.height - 2 * p.radius), 4, 10);
+      if (p.dir === 0) g.rotateZ(Math.PI / 2); else if (p.dir === 2) g.rotateX(Math.PI / 2);
+    } else continue;
+    g.translate(c[0], c[1], c[2]);
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(g), p.trigger ? trigMat : colMat);
+    g.dispose();
+    // Build in Unity space, then convert the whole object: scale z by -1 under a parent.
+    const holder = new THREE.Group();
+    const inner = new THREE.Group();
+    inner.position.fromArray(p.xf.p); inner.quaternion.fromArray(p.xf.r);
+    if (p.scale) inner.scale.fromArray(p.scale);
+    inner.add(lines);
+    holder.scale.set(1, 1, -1);
+    holder.add(inner);
+    colGroup.add(holder);
+  }
+  const markMat = new THREE.MeshBasicMaterial({ color: css('--accent') });
+  (geo.markers || []).forEach((m, i) => {
+    const o = new THREE.Group();
+    o.position.fromArray(cvP(m.xf.p)); o.quaternion.fromArray(cvQ(m.xf.r));
+    o.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.004), markMat));
+    const ax = new THREE.AxesHelper(0.02); ax.material.depthTest = false; o.add(ax);
+    o.userData.markerIndex = i;
+    markGroup.add(o);
+  });
+  if (!meshGroup.children.length && !(geo.prims || []).length) meshGroup.add(placeholderGun());
+  renderMarkers();
+  applyVisibility();
+}
+function applyVisibility() {
+  meshGroup.visible = $('vMesh').checked;
+  colGroup.visible = $('vCol').checked;
+  markGroup.visible = $('vMark').checked;
+}
+
+// ---------- hand views
+class HandView {
+  constructor(side) {
+    this.side = side;
+    const { rig, info } = RIG[side];
+    const color = new THREE.Color(css(side === 'R' ? '--handR' : '--handL'));
+    this.root = new THREE.Group();
+    this.jointMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5, transparent: true });
+    this.boneMat = new THREE.MeshStandardMaterial({ color: color.clone().lerp(new THREE.Color(0x888888), 0.35), roughness: 0.6, transparent: true });
+    this.selMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: color, emissiveIntensity: 0.6 });
+    this.pickables = [];
+    this.boneMeshes = [];
+    this.joints = rig.joints.map(() => new THREE.Group());
+    const sphere = new THREE.SphereGeometry(0.0055, 14, 10);
+    const cyl = new THREE.CylinderGeometry(0.0042, 0.0042, 1, 10, 1);
+    cyl.translate(0, 0.5, 0);
+    rig.joints.forEach((j, i) => {
+      const o = this.joints[i];
+      o.position.fromArray(j.p);
+      o.quaternion.fromArray(j.q);
+      const parent = j.parent >= 0 ? this.joints[j.parent] : this.root;
+      parent.add(o);
+      const s = new THREE.Mesh(sphere, this.jointMat);
+      s.userData = { side, index: i };
+      o.add(s); this.pickables.push(s);
+      const len = V(j.p).length();
+      if (len > 1e-4 && len < 0.25) {
+        const b = new THREE.Mesh(cyl, this.boneMat);
+        b.scale.set(1, len, 1);
+        b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), V(j.p).normalize());
+        parent.add(b);
+        this.boneMeshes.push(b);
+      }
+    });
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.012), this.jointMat);
+    handle.userData = { side, index: -1 };
+    this.root.add(handle); this.pickables.push(handle);
+    this.handle = handle;
+    this.axes = new THREE.AxesHelper(0.025);
+    this.axes.material.depthTest = false; this.axes.renderOrder = 10;
+    targetFrame.add(this.root);
+    this.glove = this.buildGlove(side, rig);
+  }
+  // The real GlovesTan3 glove, skinned to this hand's joints so it bends with the pose.
+  buildGlove(side, rig) {
+    const g = project.glove?.[side];
+    if (!g || !g.v?.length || g.jointCount !== rig.joints.length) return null;
+    const n = g.v.length / 3;
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { pos[i * 3] = g.v[i * 3]; pos[i * 3 + 1] = g.v[i * 3 + 1]; pos[i * 3 + 2] = -g.v[i * 3 + 2]; }
+    const idx = new Uint32Array(g.t.length);
+    for (let i = 0; i < g.t.length; i += 3) { idx[i] = g.t[i]; idx[i + 1] = g.t[i + 2]; idx[i + 2] = g.t[i + 1]; } // Z flip reverses winding
+    // Bone 0 is the hand root frame (joint index -1); joint i is bone i + 1.
+    const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+    for (let i = 0; i < n * 4; i++) { si[i] = Math.max(0, (g.bi[i] ?? -1) + 1); sw[i] = g.bw[i] ?? 0; }
+    for (let i = 0; i < n; i++) { // normalise, in case dropped bones left a gap
+      const s = sw[i * 4] + sw[i * 4 + 1] + sw[i * 4 + 2] + sw[i * 4 + 3];
+      if (s > 1e-6) for (let k = 0; k < 4; k++) sw[i * 4 + k] /= s; else { si[i * 4] = 0; sw[i * 4] = 1; }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    if (g.uv?.length === n * 2) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.uv), 2));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+    geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+    geo.computeVertexNormals();
+    // Bind inverses: the bake-time pose of each bone in hand-root space (the root itself is the identity).
+    const inverses = [new THREE.Matrix4()];
+    g.bakeJoints.forEach(x => inverses.push(new THREE.Matrix4().compose(V(cvP(x.p)), Q(cvQ(x.r)), new THREE.Vector3(1, 1, 1)).invert()));
+    const skeleton = new THREE.Skeleton([this.root, ...this.joints], inverses);
+    const c = g.color || [1, 1, 1, 1];
+    this.gloveMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(c[0], c[1], c[2]), roughness: 0.8, metalness: 0, transparent: true, side: THREE.DoubleSide });
+    if (g.texture) {
+      const tex = new THREE.TextureLoader().load('data:image/png;base64,' + g.texture);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.gloveMat.map = tex;
+    }
+    const mesh = new THREE.SkinnedMesh(geo, this.gloveMat);
+    mesh.bindMode = 'detached'; // vertices are posed purely by the bones, which already include the hand's placement
+    mesh.bind(skeleton, new THREE.Matrix4());
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    return mesh;
+  }
+  apply(pose) {
+    this.root.position.fromArray(pose.root.p);
+    this.root.quaternion.fromArray(pose.root.q);
+    pose.local.forEach((q, i) => this.joints[i].quaternion.fromArray(q));
+  }
+  setGhost(g) {
+    const glove = !!this.glove && $('vGlove').checked;
+    const bones = !glove || $('vBones').checked;
+    this.jointMat.opacity = g ? 0.28 : 1; this.boneMat.opacity = g ? 0.22 : 1;
+    this.jointMat.depthWrite = this.boneMat.depthWrite = !g;
+    // With the glove shown, joints draw small and on top so they stay clickable through the mesh.
+    this.jointMat.depthTest = !glove;
+    this.pickables.forEach(p => { p.visible = true; p.renderOrder = glove ? 5 : 0; p.scale.setScalar(glove ? 0.65 : 1); });
+    this.boneMeshes.forEach(b => b.visible = bones);
+    if (this.glove) {
+      this.glove.visible = glove && this.root.visible;
+      this.gloveMat.opacity = g ? 0.25 : 1;
+      this.gloveMat.depthWrite = !g;
+    }
+  }
+  highlight(index) {
+    this.pickables.forEach(p => p.material = p.userData.index === index ? this.selMat : this.jointMat);
+    this.axes.removeFromParent();
+    if (index != null && $('vAxes').checked) (index >= 0 ? this.joints[index] : this.root).add(this.axes);
+  }
+  object(index) { return index >= 0 ? this.joints[index] : this.root; }
+  dispose() {
+    this.root.removeFromParent();
+    this.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    if (this.glove) {
+      this.glove.removeFromParent();
+      this.glove.geometry.dispose();
+      this.gloveMat.map?.dispose();
+      this.gloveMat.dispose();
+    }
+  }
+}
+const hands = { L: null, R: null };
+function rebuildHands() {
+  tc.detach();
+  for (const s of ['L', 'R']) { hands[s]?.dispose(); hands[s] = new HandView(s); }
+  refreshScene();
+}
+
+// ============================================================ refresh
+function refreshScene() {
+  const side = SIDE(activeSlot), other = side === 'L' ? 'R' : 'L';
+  const trigOn = $('trigOn').checked;
+  const pose = trigOn ? triggerBlend(side, +$('trigVal').value) : curPose(false) || restPose(side);
+  hands[side].apply(pose);
+  hands[side].root.visible = true;
+  hands[side].setGhost(false);
+
+  const otherSlot = OTHER(activeSlot);
+  const op = TP()[otherSlot] || TP()['Idle' + other];
+  hands[other].root.visible = $('vGhost').checked && !!op;
+  if (op) hands[other].apply(op);
+  hands[other].setGhost(true);
+
+  if (selected && (selected.side !== side || trigOn)) select(null);
+  hands[side].highlight(selected ? selected.index : null);
+  hands[other].highlight(null);
+  // Keep the whole-hand gizmo on the pivot when the pose changes some other way (slot switch, slider…).
+  if (gizmoMode !== 'rotate' && !tc.dragging) attachGizmo();
+}
+function triggerBlend(side, t) {
+  const a = TP()['FireStart' + side] || TP()['Idle' + side];
+  const b = TP()['FireEnd' + side];
+  if (!a) return restPose(side);
+  if (!b) return a;
+  const qs = (x, y) => arr(Q(x).slerp(Q(y), t));
+  return {
+    root: { p: arr(V(a.root.p).lerp(V(b.root.p), t)), q: qs(a.root.q, b.root.q) },
+    local: a.local.map((q, i) => qs(q, b.local[i])),
+  };
+}
+
+function targetLabel(t = target) {
+  if (t === 'gun') return 'Gun';
+  if (t === 'mag') return 'Magazine';
+  if (t === 'pump') return 'Pump';
+  const p = partOf(t);
+  return p ? `${p.name}` : t.slice(5);
+}
+function refreshTargets() {
+  const sel = $('targetSel');
+  const geoParts = (project.geo?.parts || []).slice();
+  for (const p of project.parts) if (!geoParts.some(g => g.path === p.path)) geoParts.push({ path: p.path, name: p.name, type: p.type });
+  geoParts.sort((a, b) => (RACK_RE.test(b.type + b.name) - RACK_RE.test(a.type + a.name)) || a.path.localeCompare(b.path));
+  const has = d => Object.keys(d || {}).length > 0;
+  const mark = d => has(d) ? ' ●' : '';
+  let html = `<option value="gun">Gun (hold, foregrip, trigger)${mark(project.poses)}</option>`;
+  if (geoParts.length) {
+    html += '<optgroup label="Grabbable parts (racking)">';
+    for (const g of geoParts) {
+      const p = project.parts.find(x => x.path === g.path);
+      html += `<option value="${partKey(g.path).replace(/"/g, '&quot;')}">${g.name}${g.type ? ' · ' + g.type : ''}${mark(p?.poses)}</option>`;
+    }
+    html += '</optgroup>';
+  }
+  const pi = pumpInfo();
+  if (pi || has(project.pump.poses)) html += `<option value="pump">Pump${pi ? ' · ' + pi.type : ''}${mark(project.pump.poses)}</option>`;
+  html += `<option value="mag">Magazine${mark(project.mag.poses)}</option>`;
+  sel.innerHTML = html;
+  sel.value = target;
+  $('partHint').classList.toggle('hidden', geoParts.length > 0);
+  $('magBox').classList.toggle('hidden', target !== 'mag');
+  $('btnLoadMag').classList.toggle('hidden', !(game.connected && project.compatMags?.length));
+}
+function setTarget(t, quiet) {
+  if (t.startsWith('part:')) {
+    const path = t.slice(5);
+    const info = (project.geo?.parts || []).find(g => g.path === path) || { path };
+    ensurePart(info);
+  }
+  const geoChanged = (t === 'mag') !== (target === 'mag');
+  target = t;
+  if (!targetSlots().includes(activeSlot)) activeSlot = 'Idle' + SIDE(activeSlot);
+  const f = frameOf(target);
+  targetFrame.position.copy(f.p); targetFrame.quaternion.copy(f.q);
+  frameAxes.visible = !!partOf() || target === 'pump';
+  select(null);
+  $('trigOn').checked = false; $('trigVal').disabled = true;
+  $('trig').classList.toggle('hidden', target !== 'gun');
+  if (geoChanged) { buildGeo(); if (!quiet) frameGun(); }
+  if (!quiet) { refreshAll(); persist(); }
+}
+
+function refreshSlots() {
+  const box = $('slots');
+  const dict = TP();
+  box.innerHTML = '<span></span><span class="hdr">Left</span><span class="hdr">Right</span>';
+  const rows = target === 'gun' ? SLOT_ROWS : [['Idle', target === 'mag' ? 'Holding' : 'Grabbing']];
+  for (const [k, label] of rows) {
+    const l = document.createElement('span'); l.className = 'lbl'; l.textContent = label; box.append(l);
+    for (const s of ['L', 'R']) {
+      const slot = k + s;
+      const b = document.createElement('button');
+      b.className = 'slot' + (dict[slot] ? ' set' : '') + (slot === activeSlot ? ' active' : '')
+        + (k.startsWith('Fire') && !project.hasTrigger ? ' unused' : '');
+      // Pump-action gun: a foregrip hold is the pump, so the gun's Foregrip slots lead to the Pump target.
+      const toPump = target === 'gun' && k === 'Fore' && !!pumpInfo();
+      if (toPump) {
+        const pumpSet = !!project.pump.poses['Idle' + s];
+        b.className = 'slot' + (pumpSet ? ' set' : '');
+        b.innerHTML = `<span class="dot"></span>→ Pump`;
+        b.title = 'Pump-action gun: the foregrip is the pump';
+        b.onclick = () => { setTarget('pump', true); activeSlot = 'Idle' + s; select(null); refreshAll(); toast('Pump-action gun: its foregrip is the Pump'); };
+        box.append(b);
+        continue;
+      }
+      b.innerHTML = `<span class="dot"></span>${dict[slot] ? 'Set' : 'Empty'}`;
+      b.title = slot;
+      b.onclick = () => { activeSlot = slot; select(null); $('trigOn').checked = false; $('trigVal').disabled = true; refreshAll(); };
+      box.append(b);
+    }
+  }
+  $('slotNote').innerHTML = target === 'gun'
+    ? 'GlovesTan3 uses <b>Idle</b> while holding, <b>Foregrip</b> on the alternate grip, and blends <b>Fire start → end</b> with trigger pull.'
+    : target === 'mag'
+      ? 'Used while holding any magazine that matches the item IDs or magazine types below, including when you pull it out of the gun.'
+      : 'Used while this part is grabbed. The pose is stored relative to the part, so the hand travels with it as you rack (axes show the part\'s frame).';
+  const slotName = target === 'gun' ? SLOT_ROWS.find(r => activeSlot.startsWith(r[0]))[1] : (target === 'mag' ? 'Holding' : 'Grabbing');
+  $('hudSlot').textContent = `${targetLabel()} · ${slotName} · ${SIDE(activeSlot) === 'L' ? 'Left' : 'Right'} hand${dict[activeSlot] ? '' : ' (empty: showing rest pose)'}`;
+  const sel = $('copyFrom');
+  // Copy within this target, or another target's same-side pose (handy as a starting point).
+  const opts = [];
+  for (const s of targetSlots()) if (s !== activeSlot && SIDE(s) === SIDE(activeSlot) && dict[s]) opts.push([`${target}|${s}`, s]);
+  for (const t of ['gun', 'mag', ...project.parts.map(p => partKey(p.path))]) {
+    if (t === target) continue;
+    for (const s of targetSlots(t)) if (SIDE(s) === SIDE(activeSlot) && TP(t)[s]) opts.push([`${t}|${s}`, `${targetLabel(t)} · ${s}`]);
+  }
+  sel.innerHTML = '<option value="">Copy pose from…</option>' + opts.map(([v, l]) => `<option value="${v.replace(/"/g, '&quot;')}">${l}</option>`).join('');
+  $('btnMirror').disabled = !dict[OTHER(activeSlot)];
+  refreshTargets();
+}
+
+// ---------- finger controls
+// How much each knuckle bends when a whole finger is curled.
+const CURL_W = { meta: 0.15, base: 1, mid: 1, tip: 0.8 };
+const THUMB_W = { meta: 0.3, base: 0.5, mid: 1, tip: 1 };
+const curlWeight = (f, i, info) => (f.isThumb ? THUMB_W : CURL_W)[info.jointInfo[i].knuckle];
+const KNUCKLE_LABEL = { meta: 'Knuckle root', base: 'Base', mid: 'Middle', tip: 'Tip' };
+// [base, mid, tip] curls for fingers; the thumb also sets its swing (spread at the base).
+const PRESETS = {
+  Open: { fingers: [0, 0, 0], thumb: [0, 0, 0], thumbSpread: 0 },
+  Relaxed: { fingers: [14, 24, 12], thumb: [5, 12, 8], thumbSpread: 10 },
+  Grip: { fingers: [62, 78, 48], thumb: [22, 38, 28], thumbSpread: 28 },
+  Fist: { fingers: [88, 102, 72], thumb: [30, 48, 40], thumbSpread: 38 },
+  Point: { fingers: [88, 102, 72], index: [2, 4, 2], thumb: [30, 48, 40], thumbSpread: 38 },
+  Trigger: { fingers: [62, 78, 48], index: [28, 46, 22], thumb: [22, 38, 28], thumbSpread: 28 },
+};
+
+let fingerCtls = []; // { input, out, read: () => number }
+let ctlDragging = false;
+addEventListener('pointerup', () => { if (ctlDragging) { ctlDragging = false; refreshFingerValues(); } });
+
+function ctlRow(container, label, cls, range, read, write) {
+  const row = document.createElement('div');
+  row.className = 'f ' + cls;
+  row.innerHTML = `<span title="${label}">${label}</span><input type="range" min="${range[0]}" max="${range[1]}" step="0.5"><output></output>`;
+  const input = row.querySelector('input'), out = row.querySelector('output');
+  input.addEventListener('pointerdown', () => { ctlDragging = true; pushUndo(); });
+  input.addEventListener('keydown', e => { if (e.key.startsWith('Arrow') || e.key.startsWith('Page')) pushUndo(); });
+  input.addEventListener('input', () => { write(+input.value); afterFingerEdit(); });
+  input.addEventListener('dblclick', () => { pushUndo(); write(0); afterFingerEdit(); }); // double-click resets that axis
+  input.title = 'Double-click to reset';
+  container.append(row);
+  const ctl = { input, out, read };
+  fingerCtls.push(ctl);
+  return ctl;
+}
+function afterFingerEdit() {
+  refreshScene(); refreshSelection(); refreshFingerValues(); refreshSlotsLight(); persist();
+}
+
+// Change some axes of one joint, honouring limits and tip coupling.
+function editJoint(side, i, patch) {
+  const pose = curPose();
+  const lim = limitsFor(side, i);
+  const v = readJoint(side, i, pose.local[i]);
+  for (const k of Object.keys(patch)) v[k] = clampTo(patch[k], lim[k]);
+  pose.local[i] = writeJoint(side, i, v);
+  const ji = RIG[side].info.jointInfo[i];
+  if (project.coupleTip && 'curl' in patch && ji.knuckle === 'mid' && !ji.finger.isThumb) {
+    // The last finger joint naturally follows the middle one at about two thirds.
+    const tip = ji.finger.joints.find(j => RIG[side].info.jointInfo[j].knuckle === 'tip');
+    if (tip != null) {
+      const tv = readJoint(side, tip, pose.local[tip]);
+      tv.curl = clampTo(v.curl * 0.67, limitsFor(side, tip).curl);
+      pose.local[tip] = writeJoint(side, tip, tv);
+    }
+  }
+}
+const jointVal = (side, i, axis) => {
+  const pose = curPose(false) || restPose(side);
+  return readJoint(side, i, pose.local[i])?.[axis] ?? 0;
+};
+// A finger's overall curl: the weighted average of its knuckles. Moving it shifts every knuckle by
+// the same weighted amount, so per-knuckle tweaks survive.
+function fingerCurl(side, f) {
+  const { info } = RIG[side];
+  let s = 0, w = 0;
+  for (const i of f.joints) { const k = curlWeight(f, i, info); s += jointVal(side, i, 'curl') * k; w += k * k; }
+  return w ? s / w : 0;
+}
+function setFingerCurl(side, f, value) {
+  const { info } = RIG[side];
+  const delta = value - fingerCurl(side, f);
+  const coupled = project.coupleTip;
+  project.coupleTip = false; // the shift already moves the tip
+  for (const i of f.joints) editJoint(side, i, { curl: jointVal(side, i, 'curl') + delta * curlWeight(f, i, info) });
+  project.coupleTip = coupled;
+}
+function applyPreset(name) {
+  const side = SIDE(activeSlot);
+  const { info } = RIG[side];
+  const p = PRESETS[name];
+  pushUndo();
+  for (const f of info.fingers) {
+    const curls = f.isThumb ? p.thumb : (p[f.role] || p.fingers);
+    const real = f.joints.filter(i => info.jointInfo[i].knuckle !== 'meta');
+    const start = 3 - real.length; // fewer than three knuckles: use the last ones
+    for (const i of f.joints) {
+      const ji = info.jointInfo[i];
+      if (ji.knuckle === 'meta') { editJoint(side, i, { curl: 0 }); continue; }
+      const patch = { curl: curls[['base', 'mid', 'tip'].indexOf(ji.knuckle)] ?? curls[start] ?? 0 };
+      if (f.isThumb && ji.knuckle === 'base') patch.spread = p.thumbSpread;
+      editJoint(side, i, patch);
+    }
+  }
+  afterFingerEdit();
+  toast(`${name} preset applied. Adjust any finger from here.`);
+}
+
+const fingerOpen = {}; // which fingers are expanded, by role
+function refreshFingers() {
+  const side = SIDE(activeSlot);
+  const { info, rig } = RIG[side];
+  const box = $('fingers');
+  box.innerHTML = '';
+  fingerCtls = [];
+
+  const pre = document.createElement('div');
+  pre.className = 'presets';
+  pre.innerHTML = Object.keys(PRESETS).map(n => `<button data-p="${n}">${n}</button>`).join('');
+  pre.querySelectorAll('button').forEach(b => b.onclick = () => applyPreset(b.dataset.p));
+  box.append(pre);
+
+  const nonThumb = info.fingers.filter(f => !f.isThumb);
+  if (nonThumb.length) {
+    ctlRow(box, 'All fingers', 'master', [-30, 110],
+      () => nonThumb.reduce((s, f) => s + fingerCurl(side, f), 0) / nonThumb.length,
+      v => { const cur = nonThumb.reduce((s, f) => s + fingerCurl(side, f), 0) / nonThumb.length; nonThumb.forEach(f => setFingerCurl(side, f, fingerCurl(side, f) + v - cur)); });
+  }
+
+  for (const f of info.fingers) {
+    const key = f.role + f.joints[0];
+    const wrap = document.createElement('div');
+    wrap.className = 'finger' + (fingerOpen[key] ? ' open' : '');
+    const head = document.createElement('div');
+    head.className = 'fhead';
+    const tog = document.createElement('button');
+    tog.className = 'tog'; tog.textContent = fingerOpen[key] ? '▾' : '▸';
+    tog.title = 'Show each knuckle';
+    tog.onclick = () => { fingerOpen[key] = !fingerOpen[key]; refreshFingers(); };
+    head.append(tog);
+    wrap.append(head);
+    ctlRow(head, f.label, 'master', [-30, 110], () => fingerCurl(side, f), v => setFingerCurl(side, f, v));
+
+    if (fingerOpen[key]) {
+      const body = document.createElement('div');
+      body.className = 'fbody';
+      for (const i of f.joints) {
+        const ji = info.jointInfo[i];
+        const lim = limitsFor(side, i);
+        const nm = (f.isThumb && ji.knuckle === 'base') ? 'Base' : KNUCKLE_LABEL[ji.knuckle];
+        const sub = document.createElement('div');
+        sub.className = 'knuckle';
+        sub.innerHTML = `<button class="link" title="Select ${rig.joints[i].name}">${nm}</button>`;
+        sub.querySelector('button').onclick = () => select({ side, index: i });
+        body.append(sub);
+        const rng = a => project.limitRange ? lim[a] : (a === 'curl' ? [-60, 130] : [-90, 90]);
+        ctlRow(body, 'curl', 'axis', rng('curl'), () => jointVal(side, i, 'curl'), v => editJoint(side, i, { curl: v }));
+        ctlRow(body, f.isThumb ? 'swing' : 'spread', 'axis', rng('spread'), () => jointVal(side, i, 'spread'), v => editJoint(side, i, { spread: v }));
+        ctlRow(body, f.isThumb ? 'roll' : 'twist', 'axis', rng('twist'), () => jointVal(side, i, 'twist'), v => editJoint(side, i, { twist: v }));
+      }
+      wrap.append(body);
+    }
+    box.append(wrap);
+  }
+  $('curlFlip').checked = !!project.curlFlip[side];
+  $('coupleTip').checked = !!project.coupleTip;
+  $('limitRange').checked = !!project.limitRange;
+  $('nudgeStep').value = String(project.nudgeStep || 2);
+  refreshFingerValues();
+  rebuildJointCtl();
+}
+// Move every slider to the pose's actual values (so the gizmo, numbers and sliders always agree).
+function refreshFingerValues() {
+  for (const c of fingerCtls) {
+    const v = c.read();
+    if (!(ctlDragging && document.activeElement === c.input)) c.input.value = v;
+    c.out.textContent = `${Math.round(v)}°`;
+  }
+}
+function refreshSlotsLight() {
+  // Cheap update after edits: only the slot's "set" state can change.
+  if (!document.querySelector('.slot.active.set')) refreshSlots();
+}
+
+// ---------- selection
+function select(sel) {
+  selected = sel;
+  attachGizmo();
+  for (const s of ['L', 'R']) hands[s]?.highlight(s === sel?.side ? sel.index : null);
+  refreshSelection();
+  rebuildJointCtl();
+}
+
+// ---------- gizmo modes
+// rotate: rotate the selected joint (or the hand root square).
+// move / turn: move or turn the WHOLE hand, pivoting on the selected joint, or the wrist when nothing
+// is selected. The gizmo drags a hidden proxy object; its motion is applied to the hand root.
+let gizmoMode = 'rotate';
+const handProxy = new THREE.Object3D();
+targetFrame.add(handProxy);
+let proxyStart = null;
+function pivotObject(side) {
+  const h = hands[side];
+  if (selected && selected.side === side && selected.index >= 0) return h.joints[selected.index];
+  const wrist = RIG[side].info.rootKids[0];
+  return wrist != null ? h.joints[wrist] : h.root;
+}
+function attachGizmo() {
+  tc.detach();
+  if ($('trigOn').checked) return;
+  if (gizmoMode === 'rotate') {
+    if (selected) { tc.setMode('rotate'); tc.attach(hands[selected.side].object(selected.index)); }
+    return;
+  }
+  const side = SIDE(activeSlot);
+  const h = hands[side];
+  if (!h || !h.root.visible) return;
+  targetFrame.updateMatrixWorld(true);
+  const wp = pivotObject(side).getWorldPosition(new THREE.Vector3());
+  handProxy.position.copy(targetFrame.worldToLocal(wp));
+  handProxy.quaternion.copy(h.root.quaternion);
+  handProxy.updateMatrixWorld(true);
+  const pose = curPose(false) || restPose(side);
+  proxyStart = { pp: handProxy.position.clone(), pq: handProxy.quaternion.clone(), rp: V(pose.root.p), rq: Q(pose.root.q) };
+  tc.setMode(gizmoMode === 'move' ? 'translate' : 'rotate');
+  tc.attach(handProxy);
+}
+function setMode(m) {
+  if (m === 'translate') m = 'move'; // older name
+  gizmoMode = m;
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  attachGizmo();
+  refreshSelection();
+}
+// Curl / spread / twist sliders for the selected finger joint.
+let jointCtlList = [];
+function rebuildJointCtl() {
+  const box = $('jointCtl');
+  fingerCtls = fingerCtls.filter(c => !jointCtlList.includes(c));
+  jointCtlList = [];
+  box.innerHTML = '';
+  const sel = selected;
+  const ji = sel && sel.index >= 0 ? RIG[sel.side].info.jointInfo[sel.index] : null;
+  if (!ji) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  const { side, index: i } = sel;
+  const lim = limitsFor(side, i);
+  const rng = a => project.limitRange ? lim[a] : (a === 'curl' ? [-60, 130] : [-90, 90]);
+  const before = fingerCtls.length;
+  const t = ji.finger.isThumb;
+  ctlRow(box, 'curl', 'axis', rng('curl'), () => jointVal(side, i, 'curl'), v => editJoint(side, i, { curl: v }));
+  ctlRow(box, t ? 'swing' : 'spread', 'axis', rng('spread'), () => jointVal(side, i, 'spread'), v => editJoint(side, i, { spread: v }));
+  ctlRow(box, t ? 'roll' : 'twist', 'axis', rng('twist'), () => jointVal(side, i, 'twist'), v => editJoint(side, i, { twist: v }));
+  jointCtlList = fingerCtls.slice(before);
+  refreshFingerValues();
+}
+function setSpace(s) {
+  tc.setSpace(s);
+  document.querySelectorAll('#spaceSeg button').forEach(b => b.classList.toggle('on', b.dataset.space === s));
+}
+function refreshSelection() {
+  if (!selected) {
+    $('selInfo').textContent = gizmoMode === 'rotate'
+      ? 'Nothing selected. Click a joint to rotate it, or press W to move the whole hand.'
+      : `Nothing selected: the gizmo ${gizmoMode === 'move' ? 'moves' : 'turns'} the whole hand around the wrist. Click a joint to pivot there instead.`;
+    $('selEdit').classList.add('hidden');
+    return;
+  }
+  const { rig } = RIG[selected.side];
+  const pose = curPose(false) || restPose(selected.side);
+  const isRoot = selected.index < 0;
+  const ji = isRoot ? null : RIG[selected.side].info.jointInfo[selected.index];
+  $('selInfo').innerHTML = (isRoot ? `<b>Hand root</b> (${rig.rootName || 'Hand'})`
+    : `<b>${rig.joints[selected.index].name}</b> · ${ji ? `${ji.finger.label} ${KNUCKLE_LABEL[ji.knuckle].toLowerCase()}` : 'joint ' + selected.index}`)
+    + (gizmoMode === 'move' ? ' · the gizmo moves the whole hand' : gizmoMode === 'turn' ? ' · the whole hand turns around this point' : '');
+  const k = s => `<span class="kbd">${s}</span>`;
+  $('kbdHint').innerHTML = isRoot || gizmoMode === 'move'
+    ? `${k('←')}${k('→')} left/right · ${k('↑')}${k('↓')} forward/back · ${k('PgUp')}${k('PgDn')} up/down · ${k('Shift')} ×5`
+    : ji ? `${k('↑')}${k('↓')} curl · ${k('←')}${k('→')} spread · ${k('PgUp')}${k('PgDn')} twist · ${k('Shift')} ×5 · ${k('[')}${k(']')} parent/child`
+      : `${k('[')}${k(']')} parent/child`;
+  $('selEdit').classList.remove('hidden');
+  $('posEdit').classList.toggle('hidden', !isRoot);
+  $('btnSelParent').disabled = isRoot;
+  const q = isRoot ? pose.root.q : pose.local[selected.index];
+  const e = new THREE.Euler().setFromQuaternion(Q(cvQ(q)), 'YXZ'); // Unity's ZXY euler order == three's YXZ
+  const deg = x => round(THREE.MathUtils.radToDeg(x), 1);
+  if (document.activeElement?.closest('#selEdit') == null) {
+    $('eX').value = deg(e.x); $('eY').value = deg(e.y); $('eZ').value = deg(e.z);
+    if (isRoot) { const p = cvP(pose.root.p); $('pX').value = round(p[0] * 1000, 1); $('pY').value = round(p[1] * 1000, 1); $('pZ').value = round(p[2] * 1000, 1); }
+  }
+}
+function onNumericEdit() {
+  if (!selected) return;
+  pushUndo();
+  const pose = curPose();
+  const R = THREE.MathUtils.degToRad;
+  const uq = new THREE.Quaternion().setFromEuler(new THREE.Euler(R(+$('eX').value), R(+$('eY').value), R(+$('eZ').value), 'YXZ'));
+  const q = cvQ(arr(uq));
+  if (selected.index < 0) {
+    pose.root.q = q;
+    pose.root.p = cvP([+$('pX').value / 1000, +$('pY').value / 1000, +$('pZ').value / 1000]);
+  } else {
+    pose.local[selected.index] = q;
+  }
+  refreshScene(); refreshFingerValues(); refreshSlotsLight(); persist();
+}
+function onGizmoChange() {
+  if (tc.object === handProxy && proxyStart) {
+    // Whole-hand move/turn: rotate the root about the pivot by the proxy's rotation, then follow its position.
+    const pose = curPose();
+    const s = proxyStart;
+    const dq = handProxy.quaternion.clone().multiply(s.pq.clone().invert());
+    pose.root.p = arr(s.rp.clone().sub(s.pp).applyQuaternion(dq).add(handProxy.position));
+    pose.root.q = arr(dq.multiply(s.rq).normalize());
+    refreshScene(); refreshSelection(); refreshSlotsLight(); persist();
+    return;
+  }
+  if (!selected) return;
+  const pose = curPose();
+  const o = hands[selected.side].object(selected.index);
+  if (selected.index < 0) { pose.root.p = arr(o.position); pose.root.q = arr(o.quaternion.normalize()); }
+  else pose.local[selected.index] = arr(o.quaternion.normalize());
+  refreshSelection(); refreshFingerValues(); refreshSlotsLight(); persist();
+}
+
+// Keyboard nudging of the selected joint (curl/spread/twist) or hand root (position).
+function nudge(key, shift) {
+  // In Move hand mode the arrows always move the whole hand; otherwise they edit the selected joint.
+  if (!selected && gizmoMode !== 'move') return false;
+  const step = (+project.nudgeStep || 2) * (shift ? 5 : 1);
+  const side = selected ? selected.side : SIDE(activeSlot);
+  const i = gizmoMode === 'move' || !selected ? -1 : selected.index;
+  const pose = curPose();
+  if (i < 0) {
+    const d = { ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0], ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], PageUp: [0, 1, 0], PageDown: [0, -1, 0] }[key];
+    if (!d) return false;
+    pushUndo();
+    pose.root.p = arr(V(pose.root.p).add(V(d).multiplyScalar(step / 1000)));
+  } else {
+    if (!RIG[side].info.jointInfo[i]) return false;
+    const axis = { ArrowUp: ['curl', -1], ArrowDown: ['curl', 1], ArrowLeft: ['spread', -1], ArrowRight: ['spread', 1], PageUp: ['twist', 1], PageDown: ['twist', -1] }[key];
+    if (!axis) return false;
+    pushUndo();
+    editJoint(side, i, { [axis[0]]: jointVal(side, i, axis[0]) + axis[1] * step });
+  }
+  refreshScene(); refreshSelection(); refreshFingerValues(); refreshSlotsLight(); persist();
+  return true;
+}
+function selectChild() {
+  if (!selected) return;
+  const { side, index } = selected;
+  const info = RIG[side].info;
+  const kids = index < 0 ? info.rootKids : info.children[index];
+  if (kids.length) select({ side, index: kids[0] });
+}
+
+// picking
+const ray = new THREE.Raycaster();
+let downAt = null;
+renderer.domElement.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4 || tc.dragging) return;
+  if ($('trigOn').checked) return toast('Turn off trigger preview to edit');
+  const r = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), camera);
+  const side = SIDE(activeSlot);
+  const hit = ray.intersectObjects(hands[side].pickables, false)[0];
+  if (hit) select({ side, index: hit.object.userData.index });
+  else if (!tc.axis) select(null);
+});
+
+// ============================================================ markers
+function renderMarkers() {
+  const box = $('markerList');
+  const ms = viewGeo()?.markers || [];
+  if (!ms.length) { box.innerHTML = '<div><span class="sub" style="margin:0">Import a capture to see the gun\'s grab points, trigger and other parts.</span></div>'; return; }
+  box.innerHTML = '';
+  ms.forEach((m, i) => {
+    const d = document.createElement('div');
+    d.innerHTML = `<span title="${m.name}">${m.name}</span><button>Move hand here</button>`;
+    d.querySelector('button').onclick = () => {
+      pushUndo();
+      const pose = curPose();
+      targetFrame.updateMatrixWorld(true);
+      pose.root.p = arr(targetFrame.worldToLocal(V(cvP(m.xf.p)))); // marker is in gun space; poses are in the target's frame
+      refreshScene(); refreshSelection(); refreshSlots(); persist();
+      toast('Hand root moved to ' + m.name);
+    };
+    d.onmouseenter = () => markGroup.children.forEach(o => o.scale.setScalar(o.userData.markerIndex === i ? 2.5 : 1));
+    d.onmouseleave = () => markGroup.children.forEach(o => o.scale.setScalar(1));
+    box.append(d);
+  });
+}
+
+// ============================================================ project fields
+function refreshFields() {
+  $('pName').value = project.name || '';
+  $('pIds').value = project.itemIds || '';
+  $('pNames').value = project.objectNames || '';
+  $('pTrigger').checked = project.hasTrigger !== false;
+  if (project.bridgePort) $('gPort').value = project.bridgePort;
+  $('mTypes').value = project.mag.magTypes || '';
+  $('syncRepo').value = project.syncRepo || 'LionHeartChiptuner/PoseKit-Poses';
+  $('mIds').value = project.mag.itemIds || '';
+  const isDefault = project.rig.L.source === 'default' || project.rig.R.source === 'default';
+  $('rigNote').classList.toggle('hidden', !isDefault);
+  if (isDefault) {
+    const which = project.rig.L.source === 'default' && project.rig.R.source === 'default' ? 'both hands' : (project.rig.L.source === 'default' ? 'the left hand' : 'the right hand');
+    $('rigNote').querySelector('b').textContent = `Default hand rig for ${which}.`;
+  }
+}
+for (const [id, key] of [['pName', 'name'], ['pIds', 'itemIds'], ['pNames', 'objectNames']]) {
+  $(id).addEventListener('input', () => { project[key] = $(id).value; persist(); });
+}
+$('pTrigger').addEventListener('change', () => { project.hasTrigger = $('pTrigger').checked; refreshSlots(); persist(); });
+
+// ---------- similar names (same rule as the plugin's Similarity.cs, so both agree)
+const normName = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const nameTokens = s => (s.match(/[a-z]+|[0-9]+/g) || []).map(t => /^[0-9]/.test(t) ? (t.replace(/^0+/, '') || '0') : t);
+function levenshtein(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+function nameSimilarity(a, b) {
+  const na = normName(a), nb = normName(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  const ta = nameTokens(na), tb = nameTokens(nb);
+  const firstAlpha = t => t.find(x => !/^[0-9]/.test(x)) || '';
+  if (!ta.length || !tb.length || firstAlpha(ta) !== firstAlpha(tb)) return 0;
+  if (ta.length === tb.length) {
+    let allClose = true, anyDiff = false;
+    for (let i = 0; i < ta.length; i++) {
+      if (ta[i] === tb[i]) continue;
+      anyDiff = true;
+      const x = /^[0-9]+$/.test(ta[i]) ? +ta[i] : NaN, y = /^[0-9]+$/.test(tb[i]) ? +tb[i] : NaN;
+      if (!(Math.abs(x - y) <= 2)) { allClose = false; break; }
+    }
+    if (anyDiff && allClose) return 0.9;
+  }
+  const [s, l] = ta.length < tb.length ? [ta, tb] : [tb, ta];
+  if (s.length !== l.length && s.length >= 2 && s.every((x, i) => x === l[i])) return 0.85;
+  return 1 - levenshtein(na, nb) / Math.max(na.length, nb.length);
+}
+// Best score of an item against the pose set's guns (by item ID and by display name).
+function similarityToSet(item, ids) {
+  let best = 0, to = '';
+  for (const id of ids) {
+    const other = game.items.find(i => i.id === id);
+    const s = Math.max(nameSimilarity(item.id, id), other && item.name && other.name ? nameSimilarity(item.name, other.name) : 0);
+    if (s > best) { best = s; to = id; }
+  }
+  return { score: best, to };
+}
+
+const AUTO_COPY_MIN = 0.8;
+// Similar firearms from the game's item list, best first. Returns null (after explaining why) when it can't look.
+function findSimilar() {
+  const ids = splitList(project.itemIds);
+  if (!ids.length) { toast('Add the gun\'s item ID first (or load its model from the game)'); $('pIds').focus(); return null; }
+  if (!game.connected) { toast('Connect to the game first: the list of guns comes from H3VR'); $('btnConnect').focus(); return null; }
+  return game.items
+    .filter(i => i.cat === 'Firearm' && !ids.includes(i.id))
+    .map(i => ({ item: i, ...similarityToSet(i, ids) }))
+    .filter(r => r.score >= 0.5)
+    .sort((a, b) => b.score - a.score);
+}
+function addGuns(add) {
+  const before = project.itemIds;
+  project.itemIds = [...new Set([...splitList(project.itemIds), ...add])].join(', ');
+  refreshFields(); persist(); // with Live sync on, persist() also sends the new list to the game
+  return before;
+}
+// "Auto copy": in one click, give these poses to every gun with a very similar name.
+$('btnAutoCopy').onclick = () => {
+  const rows = findSimilar();
+  if (!rows) return;
+  const add = rows.filter(r => r.score >= AUTO_COPY_MIN).map(r => r.item.id);
+  if (!add.length) return toast('No guns with a similar enough name. Use Review… to see near misses.');
+  addGuns(add);
+  const names = rows.filter(r => add.includes(r.item.id)).map(r => r.item.name || r.item.id);
+  toast(`Poses copied to ${add.length} gun(s): ${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''}. Send to game (or Live sync) to apply.`);
+};
+
+let simRows = [];
+function renderSimilar() {
+  const min = +$('simMin').value;
+  $('simMinOut').textContent = min.toFixed(2);
+  const box = $('simList');
+  box.innerHTML = '';
+  const shown = simRows.filter(r => r.score >= min);
+  for (const r of shown) {
+    const d = document.createElement('div');
+    d.innerHTML = `<label class="check" style="margin:0;flex:1 1 auto;min-width:0"><input type="checkbox"${r.on ? ' checked' : ''}><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.item.id}${r.item.mod ? ' · mod' : ''}">${r.item.name || r.item.id}</span></label><span class="sub" style="margin:0;flex:0 0 auto">${r.score.toFixed(2)} ~ ${r.to}</span>`;
+    d.querySelector('input').onchange = e => { r.on = e.target.checked; };
+    box.append(d);
+  }
+  if (!shown.length) box.innerHTML = '<div><span class="sub" style="margin:0">No similar guns at this threshold.</span></div>';
+}
+$('simMin').oninput = renderSimilar;
+$('btnSimilar').onclick = () => {
+  const rows = findSimilar();
+  if (!rows) return;
+  const ids = splitList(project.itemIds);
+  simRows = rows.map(r => ({ ...r, on: r.score >= AUTO_COPY_MIN }));
+  $('simInfo').textContent = `Guns whose names look like ${ids.join(', ')}. Ticked guns get these poses (they're added to the item IDs). Auto copy ticks everything scoring ${AUTO_COPY_MIN.toFixed(2)} or more.`;
+  renderSimilar();
+  const dlg = $('simDlg');
+  dlg.onclose = () => {
+    if (dlg.returnValue !== 'ok') return;
+    const add = simRows.filter(r => r.on && r.score >= +$('simMin').value).map(r => r.item.id);
+    if (!add.length) return toast('Nothing ticked');
+    addGuns(add);
+    toast(`Added ${add.length} gun(s): ${add.slice(0, 4).join(', ')}${add.length > 4 ? '…' : ''}`);
+  };
+  dlg.showModal();
+};
+
+function refreshAll() {
+  refreshFields(); refreshSlots(); refreshFingers(); refreshScene(); refreshSelection();
+}
+
+// ============================================================ import / export
+function download(name, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const fileSafe = s => (s || 'poses').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'poses';
+const splitList = s => (s || '').split(',').map(x => x.trim()).filter(Boolean);
+
+// Poses -> game format. fk() works in the target's own frame, which is exactly what the loader expects.
+function exportSlots(dict, slots) {
+  return slots.filter(s => dict[s]).map(slot => {
+    const { wp, wq } = fk(SIDE(slot), dict[slot]);
+    return { slot, joints: wp.map((p, i) => ({ p: cvP(arr(p)), r: cvQ(arr(wq[i].normalize())) })) };
+  });
+}
+// Build the game's pose set from the project. Returns { set, summary } or { error, focus }.
+function buildPoseSet() {
+  const poses = exportSlots(project.poses, SLOTS);
+  const parts = project.parts
+    .map(p => ({ name: p.name, path: p.path, type: p.type, poses: exportSlots(p.poses, ['IdleL', 'IdleR']) }))
+    .filter(p => p.poses.length);
+  const magPoses = exportSlots(project.mag.poses, ['IdleL', 'IdleR']);
+  const magazine = { itemIds: splitList(project.mag.itemIds), magazineTypes: splitList(project.mag.magTypes), poses: magPoses };
+  const pumpPoses = exportSlots(project.pump.poses, ['IdleL', 'IdleR']);
+  const total = poses.length + parts.reduce((n, p) => n + p.poses.length, 0) + magPoses.length + pumpPoses.length;
+  if (!total) return { error: 'Nothing to send yet: pose at least one slot' };
+  const ids = splitList(project.itemIds), names = splitList(project.objectNames);
+  if ((poses.length || parts.length || pumpPoses.length) && !ids.length && !names.length) return { error: 'Add an item ID or object name so the loader knows which gun to use', focus: 'pIds' };
+  if (magPoses.length && !magazine.itemIds.length && !magazine.magazineTypes.length) {
+    return { error: 'Add a magazine type or item ID so the loader knows which magazines to use', focus: 'mTypes' };
+  }
+  const set = {
+    format: 'gt3poses', version: 2,
+    name: project.name || ids[0] || names[0] || magazine.magazineTypes[0] || magazine.itemIds[0],
+    match: { itemIds: ids, objectNames: names },
+    hasTrigger: project.hasTrigger !== false,
+    useGrabPos: false, grabPos: { p: [0, 0, 0], r: [0, 0, 0, 1] },
+    jointCount: RIG.R.rig.joints.length,
+    poses, parts, magazine,
+    pump: { poses: pumpPoses },
+  };
+  const bits = [poses.length && `${poses.length} gun`, parts.length && `${parts.length} part`, pumpPoses.length && `${pumpPoses.length} pump`, magPoses.length && `${magPoses.length} magazine`].filter(Boolean);
+  return { set, summary: bits.join(', ') + ' pose(s)' };
+}
+function defaultRigWarning() {
+  return project.rig.L.source === 'default' || project.rig.R.source === 'default';
+}
+function exportForGame() {
+  const b = buildPoseSet();
+  if (b.error) { toast(b.error); if (b.focus === 'mTypes') setTarget('mag'); if (b.focus) $(b.focus).focus(); return; }
+  if (defaultRigWarning() && !confirm('At least one hand still uses the default rig, so its poses will not line up in game. Export anyway?')) return;
+  download(fileSafe(b.set.name) + '.json', b.set);
+  toast(`Exported ${b.summary}. Put the file in BepInEx/config/GlovesTan3Poses`);
+}
+function saveProject() {
+  download(fileSafe(project.name || 'pose-project') + '.gt3proj.json', project);
+}
+
+async function importFiles(files) {
+  for (const f of files) {
+    let data;
+    try { data = JSON.parse(await f.text()); }
+    catch { toast(`${f.name} is not valid JSON`); continue; }
+    try { await importData(data, f.name); }
+    catch (e) { console.error(e); toast(`Could not import ${f.name}: ${e.message}`); }
+  }
+}
+async function importData(d, fname) {
+  switch (d.format) {
+    case 'gt3rig': {
+      let n = 0;
+      if (d.left?.joints?.length) { setRig('L', rigFromUnity(d.left, 'game')); n++; }
+      if (d.right?.joints?.length) { setRig('R', rigFromUnity(d.right, 'game')); n++; }
+      if (!n) throw new Error('rig file has no hands');
+      rebuildHands(); refreshAll(); persist();
+      toast(`Loaded GlovesTan3 rig (${RIG.R.rig.joints.length} joints)`);
+      break;
+    }
+    case 'gt3capture': await importCapture(d, fname); break;
+    case 'gt3model': applyModel(d); break;
+    case 'gt3glove': applyGlove(d); break;
+    case 'gt3poses': {
+      let n = 0;
+      const load = (dict, list, slots) => {
+        for (const p of list || []) {
+          const side = SIDE(p.slot);
+          if (!slots.includes(p.slot) || !p.joints || p.joints.length !== RIG[side].rig.joints.length) continue;
+          const wp = p.joints.map(j => V(cvP(j.p))), wq = p.joints.map(j => Q(cvQ(j.r)));
+          dict[p.slot] = poseFromWorld(side, wp, wq, null);
+          n++;
+        }
+      };
+      load(project.poses, d.poses, SLOTS);
+      for (const p of d.parts || []) {
+        const info = (project.geo?.parts || []).find(g => g.path === p.path) || { path: p.path, name: p.name, type: p.type };
+        load(ensurePart(info).poses, p.poses, ['IdleL', 'IdleR']);
+      }
+      if (d.pump?.poses?.length) load(project.pump.poses, d.pump.poses, ['IdleL', 'IdleR']);
+      if (d.magazine) {
+        load(project.mag.poses, d.magazine.poses, ['IdleL', 'IdleR']);
+        if (!project.mag.itemIds) project.mag.itemIds = (d.magazine.itemIds || []).join(', ');
+        if (!project.mag.magTypes) project.mag.magTypes = (d.magazine.magazineTypes || []).join(', ');
+      }
+      if (!n) throw new Error('no slots match the current rig. Import the rig first');
+      if (project.geo) setGunGeo(project.geo); // pump-action gun: moves Foregrip poses into Pump
+      if (!project.name) project.name = d.name || '';
+      if (!project.itemIds) project.itemIds = (d.match?.itemIds || []).join(', ');
+      if (!project.objectNames) project.objectNames = (d.match?.objectNames || []).join(', ');
+      project.hasTrigger = d.hasTrigger !== false;
+      refreshAll(); persist();
+      toast(`Imported ${n} slot(s) from ${fname}`);
+      break;
+    }
+    case 'gt3proj': {
+      loadProject(d);
+      toast('Project loaded');
+      break;
+    }
+    default: throw new Error('unknown file type (expected a PoseKit rig, capture, model, pose set or project)');
+  }
+}
+function importCapture(c, fname) {
+  return new Promise(resolve => {
+    const side = c.side === 'L' ? 'L' : 'R';
+    // Which target the capture belongs to: a magazine, a grabbed part (slide, bolt…), or the gun itself.
+    const capTarget = c.isMagazine ? 'mag' : c.isPump ? 'pump' : c.partPath ? partKey(c.partPath) : 'gun';
+    const where = c.isMagazine ? ` holding magazine (${c.magazineType})` : c.isPump ? ` on the pump (${c.partType})` : c.partPath ? ` gripping ${c.partPath.split('/').pop()} (${c.partType})` : c.onForegrip ? ' on the foregrip' : '';
+    $('capInfo').textContent = `${c.itemId || c.objectName} · ${side === 'L' ? 'left' : 'right'} hand${where}${c.fromPhysics ? ' · from physical fingers' : ''} · ${c.joints.length} joints · ${(c.geo?.meshes || []).length} meshes`;
+    $('capSlot').innerHTML = targetSlots(capTarget).filter(s => SIDE(s) === side).map(s => `<option>${s}</option>`).join('');
+    $('capSlot').value = (c.onForegrip && capTarget === 'gun' ? 'Fore' : 'Idle') + side;
+    $('capGeo').checked = !!c.geo;
+    const matchList = c.isMagazine ? project.mag.itemIds : project.itemIds;
+    $('capMatch').checked = !!c.itemId && !splitList(matchList).includes(c.itemId) && !(c.isMagazine && splitList(project.mag.magTypes).includes(c.magazineType));
+    $('capMatchLbl').textContent = c.isMagazine ? 'Add its magazine type to this pose set' : 'Add its item ID to this pose set';
+    const dlg = $('capDlg');
+    dlg.onclose = () => {
+      if (dlg.returnValue === 'ok') {
+        if (c.rig?.joints?.length) {
+          const cur = project.rig[side];
+          const sameShape = cur.source !== 'default' && cur.joints.length === c.rig.joints.length;
+          if (!sameShape) { setRig(side, rigFromUnity({ ...c.rig, side }, 'game')); rebuildHands(); }
+        }
+        if (c.joints.length !== RIG[side].rig.joints.length) { toast('Capture joint count does not match the rig'); return resolve(); }
+        const slot = $('capSlot').value;
+        const useGeo = $('capGeo').checked && c.geo;
+        if (capTarget === 'mag') {
+          if (useGeo) project.mag.geo = c.geo;
+          if ($('capMatch').checked) {
+            if (c.magazineType) project.mag.magTypes = [...new Set([...splitList(project.mag.magTypes), c.magazineType])].join(', ');
+            else if (c.itemId) project.mag.itemIds = [...splitList(project.mag.itemIds), c.itemId].join(', ');
+          }
+        } else {
+          if (useGeo) setGunGeo(c.geo);
+          if ($('capMatch').checked && c.itemId) project.itemIds = [...splitList(project.itemIds), c.itemId].join(', ');
+          if (!project.name) project.name = c.itemId || c.objectName || '';
+        }
+        let part = null;
+        if (capTarget.startsWith('part:')) {
+          part = ensurePart({ path: c.partPath, name: c.partPath.split('/').pop(), type: c.partType, xf: c.partXf });
+          if (!useGeo && !(project.geo?.parts || []).some(g => g.path === c.partPath)) part.rest = clone(c.partXf);
+        }
+        if (capTarget === 'pump') {
+          part = true; // re-express in the pump's frame below
+          if (!pumpInfo()) project.pump.rest = clone(c.partXf);
+        }
+        setTarget(capTarget, true);
+        activeSlot = slot;
+        pushUndo();
+        let wp = c.joints.map(j => V(cvP(j.p))), wq = c.joints.map(j => Q(cvQ(j.r)));
+        let rootXf = c.handRoot ? { p: V(cvP(c.handRoot.p)), q: Q(cvQ(c.handRoot.r)) } : null;
+        if (part && c.partXf) {
+          // Captured in gun space with the part wherever it was; re-express relative to the part.
+          const F = { p: V(cvP(c.partXf.p)), q: Q(cvQ(c.partXf.r)) };
+          const iq = F.q.clone().invert();
+          const toLocal = (p, q) => ({ p: p.clone().sub(F.p).applyQuaternion(iq), q: iq.clone().multiply(q) });
+          const loc = wp.map((p, i) => toLocal(p, wq[i]));
+          wp = loc.map(x => x.p); wq = loc.map(x => x.q);
+          if (rootXf) rootXf = toLocal(rootXf.p, rootXf.q);
+        }
+        TP()[slot] = poseFromWorld(side, wp, wq, rootXf);
+        buildGeo(); if (useGeo) frameGun();
+        refreshAll(); persist();
+        toast(`Capture applied to ${targetLabel()} · ${slot}`);
+      }
+      resolve();
+    };
+    dlg.showModal();
+  });
+}
+// Replace the gun model and move every part's rest frame to where that model has it.
+function setGunGeo(geo) {
+  project.geo = geo;
+  // Parts from a different gun (e.g. a Glock's _Slide on an AKM) would never be found in game: drop them.
+  if (geo.parts) {
+    // A pump posed as an ordinary part (older builds) moves into the Pump section.
+    if (geo.pump?.path) {
+      const old = project.parts.find(p => p.path === geo.pump.path);
+      if (old && Object.keys(old.poses || {}).length && !Object.keys(project.pump.poses).length) {
+        project.pump.poses = old.poses;
+        setTimeout(() => toast('Moved the pump poses into the new Pump section'), 300);
+      }
+      if (old) project.parts = project.parts.filter(p => p !== old);
+    }
+    const has = p => geo.parts.some(g => g.path === p.path || (p.type && g.type === p.type));
+    const stale = project.parts.filter(p => !has(p));
+    if (stale.length) {
+      project.parts = project.parts.filter(has);
+      if (stale.some(p => p.path === target.slice(5))) target = 'gun';
+      setTimeout(() => toast(`Removed ${stale.map(p => p.name || p.path).join(', ')}: not on this gun`), 3300);
+    }
+  }
+  for (const p of project.parts) {
+    const g = (geo.parts || []).find(x => x.path === p.path);
+    if (g?.xf) p.rest = clone(g.xf);
+  }
+  // Pump-action gun: Foregrip poses become Pump poses (re-expressed relative to the pump), since in game a
+  // foregrip hold is the pump.
+  if (geo.pump?.path && !Object.keys(project.pump.poses).length) {
+    const fore = ['ForeL', 'ForeR'].filter(s => project.poses[s]);
+    if (fore.length) {
+      const F = pumpFrame();
+      const iq = F.q.clone().invert();
+      for (const s of fore) {
+        const pose = clone(project.poses[s]);
+        pose.root = {
+          p: arr(V(pose.root.p).sub(F.p).applyQuaternion(iq)),
+          q: arr(iq.clone().multiply(Q(pose.root.q)).normalize()),
+        };
+        project.pump.poses['Idle' + s.slice(-1)] = pose;
+        delete project.poses[s];
+      }
+      setTimeout(() => toast(`Pump-action gun: moved the Foregrip pose${fore.length > 1 ? 's' : ''} to Pump`), 600);
+    }
+  }
+  if (target.startsWith('part:') || target === 'pump') setTarget(target, true);
+}
+function loadProject(d) {
+  const base = newProject();
+  project = {
+    ...base, ...d,
+    rig: { ...base.rig, ...(d.rig || {}) }, curlFlip: { ...base.curlFlip, ...(d.curlFlip || {}) },
+    poses: d.poses || {}, parts: d.parts || [], mag: { ...base.mag, ...(d.mag || {}), poses: d.mag?.poses || {} },
+    pump: { ...base.pump, ...(d.pump || {}), poses: d.pump?.poses || {} },
+  };
+  setRig('L', project.rig.L); setRig('R', project.rig.R);
+  rebuildHands();
+  target = 'gun';
+  if (project.geo) setGunGeo(project.geo); // also drops parts left over from another gun
+  setTarget('gun', true);
+  buildGeo(); refreshAll();
+  persist();
+}
+
+$('btnImport').onclick = () => $('file').click();
+$('file').onchange = async e => { await importFiles([...e.target.files]); e.target.value = ''; };
+$('btnExport').onclick = exportForGame;
+$('btnSave').onclick = saveProject;
+$('btnNew').onclick = () => {
+  if (!confirm('Start a new pose set? The game rig is kept; poses, geometry and names are cleared.')) return;
+  const keepRig = clone(project.rig);
+  project = newProject(); project.rig = keepRig;
+  loadProject(project);
+  undoStack.length = 0;
+};
+let dragDepth = 0;
+view.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('drop').classList.add('show'); });
+view.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').classList.remove('show'); } });
+view.addEventListener('dragover', e => e.preventDefault());
+view.addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('drop').classList.remove('show'); importFiles([...e.dataTransfer.files]); });
+
+// ============================================================ models & game link
+function applyModel(m) {
+  if (!m.geo) throw new Error('model file has no geometry');
+  let idNote = '';
+  if (m.isMagazine) {
+    project.mag.geo = m.geo;
+    project.mag.name = m.name || m.itemId || '';
+    if (m.magazineType && !splitList(project.mag.magTypes).length && !splitList(project.mag.itemIds).length) project.mag.magTypes = m.magazineType;
+    else if (m.magazineType && !splitList(project.mag.magTypes).includes(m.magazineType)) idNote = ' (magazine types left unchanged)';
+    setTarget('mag', true);
+  } else {
+    setGunGeo(m.geo);
+    if (!project.name) project.name = m.name || m.itemId || '';
+    if (m.itemId && !splitList(project.itemIds).length) project.itemIds = m.itemId;
+    else if (m.itemId && !splitList(project.itemIds).includes(m.itemId)) idNote = ' (item IDs left unchanged)';
+    // Magazines are matched by type by default, which covers every compatible magazine.
+    if (m.magazineType && m.magazineType !== 'None' && !splitList(project.mag.magTypes).length) project.mag.magTypes = m.magazineType;
+    if (m.compatibleMags) project.compatMags = m.compatibleMags;
+    if (target === 'mag') setTarget('gun', true);
+  }
+  buildGeo(); frameGun(); refreshAll(); persist();
+  const parts = `${m.readableMeshes ?? (m.geo.meshes || []).length} meshes` + (m.boxedMeshes ? `, ${m.boxedMeshes} locked parts shown as boxes` : '');
+  toast(`Loaded ${m.name || m.itemId}: ${parts}${idNote}`);
+}
+
+const game = { items: [], connected: false };
+// Opened from the game itself (http://127.0.0.1:<port>/)? Then talk to the same origin: no CORS or
+// local-network permission is involved, which is the most reliable way to connect.
+const SERVED_BY_GAME = /^https?:$/.test(location.protocol) && /^(127\.0\.0\.1|localhost)$/.test(location.hostname) && !!location.port;
+const gameUrl = path => SERVED_BY_GAME && +$('gPort').value === +location.port
+  ? path
+  : `http://127.0.0.1:${+$('gPort').value || 48261}${path}`;
+function unreachable() {
+  const port = +$('gPort').value || 48261;
+  return SERVED_BY_GAME
+    ? 'Could not reach H3VR. Is the game still running?'
+    : `Could not reach H3VR. If the game is running, open http://127.0.0.1:${port}/ in Chrome or Edge instead of this file. Browsers often block files on disk from talking to the game.`;
+}
+async function gameGet(path) {
+  let res;
+  try { res = await fetch(gameUrl(path), { cache: 'no-store' }); }
+  catch { throw new Error(unreachable()); }
+  let body = null;
+  try { body = await res.json(); } catch { /* empty or invalid body */ }
+  if (!res.ok) throw new Error(body?.error || `Game answered ${res.status}`);
+  return body;
+}
+function setGameStatus(text, ok) {
+  $('gStatus').textContent = text;
+  $('gStatus').style.color = ok ? 'var(--ok)' : '';
+}
+async function connectGame() {
+  $('btnConnect').disabled = true;
+  setGameStatus('Connecting…');
+  try {
+    const st = await gameGet('/status');
+    if (st?.format !== 'gt3bridge') throw new Error('Something else is using that port');
+    const list = await gameGet('/items');
+    game.items = list.items || [];
+    game.connected = true;
+    project.bridgePort = +$('gPort').value; persist();
+    setGameStatus(`Connected · ${game.items.length} items${st.gloves ? ' · gloves spawned' : ' · gloves not spawned'}`, true);
+    const cats = [...new Set(game.items.map(i => i.cat))].sort();
+    $('gCat').innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option${c === 'Firearm' ? ' selected' : ''}>${c}</option>`).join('');
+    $('gPanel').classList.remove('hidden');
+    renderGameList();
+    refreshTargets();
+  } catch (e) {
+    game.connected = false;
+    $('gPanel').classList.add('hidden');
+    setGameStatus(e.message);
+  } finally { $('btnConnect').disabled = false; }
+}
+function renderGameList() {
+  const q = $('gSearch').value.trim().toLowerCase();
+  const cat = $('gCat').value;
+  const hits = game.items.filter(i => (!cat || i.cat === cat) && (!q || (i.name || '').toLowerCase().includes(q) || i.id.toLowerCase().includes(q)));
+  const shown = hits.slice(0, 150);
+  const box = $('gList');
+  box.innerHTML = '';
+  for (const it of shown) {
+    const d = document.createElement('div');
+    const label = document.createElement('span');
+    label.textContent = it.name || it.id;
+    label.title = `${it.id} · ${it.cat}${it.mod ? ' · mod' : ''}`;
+    const b = document.createElement('button');
+    b.textContent = 'Load';
+    b.onclick = () => loadGameModel(it, b);
+    d.append(label, b);
+    box.append(d);
+  }
+  if (!shown.length) box.innerHTML = '<div><span class="sub" style="margin:0">No matching items.</span></div>';
+  $('gCount').textContent = hits.length > shown.length ? `Showing ${shown.length} of ${hits.length}. Refine the search to see more.` : `${hits.length} item(s)`;
+}
+async function loadGameModel(it, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  try { applyModel(await gameGet('/model?id=' + encodeURIComponent(it.id))); }
+  catch (e) { toast(e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Load'; }
+}
+async function gamePost(path, body) {
+  let res;
+  try {
+    res = await fetch(gameUrl(path), {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-PoseKit': '1' },
+      body: JSON.stringify(body),
+    });
+  } catch { throw new Error(unreachable()); }
+  let data = null;
+  try { data = await res.json(); } catch { /* empty body */ }
+  if (!res.ok) throw new Error(data?.error || `Game answered ${res.status}`);
+  return data;
+}
+function setLiveStatus(text, ok) {
+  $('liveStatus').textContent = text;
+  $('liveStatus').style.color = ok ? 'var(--ok)' : (ok === false ? 'var(--warn)' : '');
+}
+function describeLive(r) {
+  const n = (r.updated || 0) + (r.rebuilt || 0);
+  const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return n ? `Live · ${n} object(s) in game updated · ${t}` : `Live · sent · grab the gun (or magazine) in game to see it · ${t}`;
+}
+
+// Send to game: apply now and save the pose set into the game's pose folder.
+async function sendToGame() {
+  const b = buildPoseSet();
+  if (b.error) { toast(b.error); if (b.focus === 'mTypes') setTarget('mag'); if (b.focus) $(b.focus).focus(); return; }
+  if (defaultRigWarning() && !confirm('At least one hand still uses the default rig, so its poses will not line up in game. Send anyway?')) return;
+  $('btnSend').disabled = true;
+  try {
+    const r = await gamePost('/poses?save=1', b.set);
+    setLiveStatus(describeLive(r), true);
+    toast(`Sent ${b.summary} to the game${r.saved ? ' and saved ' + r.saved.split(/[\\/]/).pop() : ''}`);
+  } catch (e) { setLiveStatus(e.message, false); toast(e.message); }
+  finally { $('btnSend').disabled = false; }
+}
+
+// Live sync: push (without saving) at most every ~80 ms while editing, never overlapping requests.
+const live = { timer: 0, inFlight: false, dirty: false };
+function scheduleLivePush() {
+  if (!$('liveSync').checked || !game.connected) return;
+  if (!live.timer) live.timer = setTimeout(() => { live.timer = 0; livePush(); }, 80);
+}
+async function livePush() {
+  if (live.inFlight) { live.dirty = true; return; }
+  const b = buildPoseSet();
+  if (b.error) { setLiveStatus(b.error, false); return; }
+  live.inFlight = true;
+  try { setLiveStatus(describeLive(await gamePost('/poses', b.set)), true); }
+  catch (e) { setLiveStatus(e.message, false); }
+  finally {
+    live.inFlight = false;
+    if (live.dirty) { live.dirty = false; livePush(); }
+  }
+}
+$('btnSend').onclick = sendToGame;
+
+// ---------- Sync with GitHub repo: download the pose files in a public repository's main folder.
+// Read-only: the browser fetches from GitHub, then each pose set goes to the game like "Send to game".
+const DEFAULT_SYNC_REPO = 'LionHeartChiptuner/PoseKit-Poses';
+function setSyncStatus(text, ok) {
+  $('syncStatus').textContent = text;
+  $('syncStatus').style.color = ok ? 'var(--ok)' : (ok === false ? 'var(--warn)' : '');
+}
+function parseRepo(s) {
+  const m = (s || '').trim().replace(/\.git$/, '').match(/^(?:https?:\/\/github\.com\/)?([\w.-]+)\/([\w.-]+)\/?$/i);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+// Same identity the plugin uses (SetKey): name, else first item ID, else first magazine type.
+function poseSetKey(s) {
+  if (s?.name?.trim()) return s.name.trim();
+  if (s?.match?.itemIds?.length) return s.match.itemIds[0];
+  if (s?.magazine?.magazineTypes?.length) return 'mag:' + s.magazine.magazineTypes[0];
+  return '';
+}
+async function githubJson(url) {
+  let res;
+  try { res = await fetch(url, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' }); }
+  catch { throw new Error('Could not reach GitHub. Check your internet connection.'); }
+  const data = await res.json().catch(() => null);
+  if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
+    const reset = +res.headers.get('x-ratelimit-reset');
+    throw new Error(`GitHub's download limit for this hour is used up${reset ? '; try again after ' + new Date(reset * 1000).toLocaleTimeString() : ''}.`);
+  }
+  if (res.status === 404) throw new Error(data?.message === 'This repository is empty.' ? 'The repository has no files yet.' : 'Repository not found (it must be public).');
+  if (!res.ok) throw new Error(data?.message || `GitHub answered ${res.status}`);
+  return data;
+}
+let syncRows = [];
+async function syncWithRepo() {
+  const repo = parseRepo($('syncRepo').value);
+  if (!repo) { toast('Enter the repository as owner/name, e.g. ' + DEFAULT_SYNC_REPO); $('syncRepo').focus(); return; }
+  if (!game.connected) { toast('Connect to the game first: synced poses are saved into the game\'s pose folder'); return; }
+  project.syncRepo = repo; persist();
+  $('btnSyncRepo').disabled = true;
+  try {
+    setSyncStatus(`Reading ${repo}…`);
+    const listing = await githubJson(`https://api.github.com/repos/${repo}/contents/`);
+    const files = (Array.isArray(listing) ? listing : []).filter(f => f.type === 'file' && /\.json$/i.test(f.name) && f.download_url);
+    if (!files.length) { setSyncStatus(`No .json pose files in the main folder of ${repo}.`, false); return; }
+    setSyncStatus(`Downloading ${files.length} file(s)…`);
+    const local = (await gameGet('/posesets')).sets || [];
+    syncRows = await Promise.all(files.map(async f => {
+      const row = { file: f.name, url: f.html_url, on: false };
+      try {
+        const res = await fetch(f.download_url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`download failed (${res.status})`);
+        let set;
+        try { set = JSON.parse(await res.text()); } catch { throw new Error('not valid JSON'); }
+        if (set?.format !== 'gt3poses') throw new Error('not a PoseKit pose set');
+        row.set = set;
+        row.key = poseSetKey(set);
+        if (!row.key) throw new Error('pose set has no name or item ID');
+        const ids = (set.match?.itemIds || []).map(s => s.toLowerCase());
+        // Replaces a local set when it has the same identity or covers the same guns.
+        row.replaces = local.filter(l => l.key === row.key || (l.itemIds || []).some(id => ids.includes(id.toLowerCase())));
+        row.guns = set.match?.itemIds || [];
+        row.on = !row.replaces.length;
+        row.joints = set.jointCount;
+      } catch (e) { row.error = e.message; }
+      return row;
+    }));
+    showSyncDialog(repo);
+  } catch (e) { setSyncStatus(e.message, false); toast(e.message); }
+  finally { $('btnSyncRepo').disabled = false; }
+}
+function showSyncDialog(repo) {
+  const ok = syncRows.filter(r => !r.error);
+  $('syncInfo').textContent = `${ok.length} pose set(s) in ${repo}. New ones are ticked. Ones that would replace a pose set you already have are not: tick them to replace yours.`;
+  const box = $('syncList');
+  box.innerHTML = '';
+  const rigJoints = RIG.R.rig.source === 'game' ? RIG.R.rig.joints.length : null;
+  for (const r of syncRows) {
+    const d = document.createElement('div');
+    const label = document.createElement('label');
+    label.className = 'check';
+    label.style.cssText = 'margin:0;flex:1 1 auto;min-width:0;align-items:flex-start';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = r.on; cb.disabled = !!r.error; cb.style.marginTop = '3px';
+    cb.onchange = () => { r.on = cb.checked; };
+    const text = document.createElement('span');
+    const title = document.createElement('b');
+    title.textContent = r.key || r.file;
+    const sub = document.createElement('div');
+    sub.className = 'sub'; sub.style.margin = '0';
+    if (r.error) sub.textContent = `${r.file}: skipped, ${r.error}`;
+    else {
+      const bits = [r.guns.length ? `${r.guns.length} gun(s): ${r.guns.slice(0, 4).join(', ')}${r.guns.length > 4 ? '…' : ''}` : 'magazines only'];
+      bits.push(r.replaces.length ? `replaces your ${r.replaces.map(l => l.file).join(', ')}` : 'new');
+      if (rigJoints && r.joints && r.joints !== rigJoints) bits.push(`made for a ${r.joints}-joint hand, yours has ${rigJoints}`);
+      sub.textContent = bits.join(' · ');
+      if (r.replaces.length) sub.style.color = 'var(--warn)';
+    }
+    text.append(title, sub);
+    label.append(cb, text);
+    d.append(label);
+    box.append(d);
+  }
+  const dlg = $('syncDlg');
+  dlg.onclose = async () => {
+    if (dlg.returnValue !== 'ok') { setSyncStatus('Sync cancelled. Nothing was changed.'); return; }
+    const picked = syncRows.filter(r => r.on && r.set);
+    if (!picked.length) { setSyncStatus('Nothing ticked. Nothing was changed.'); return; }
+    let done = 0;
+    const failed = [];
+    for (const r of picked) {
+      setSyncStatus(`Saving ${done + 1}/${picked.length}: ${r.key}…`);
+      try { await gamePost('/poses?save=1', r.set); done++; }
+      catch (e) { failed.push(`${r.key} (${e.message})`); }
+    }
+    setSyncStatus(`Synced ${done} pose set(s) into the game${failed.length ? `; failed: ${failed.join(', ')}` : ''}.`, !failed.length);
+    toast(`Downloaded ${done} pose set(s) from ${repo}${failed.length ? `, ${failed.length} failed` : ''}`);
+  };
+  dlg.showModal();
+}
+$('btnSyncRepo').onclick = syncWithRepo;
+$('syncRepo').addEventListener('change', () => { const r = parseRepo($('syncRepo').value); if (r) { project.syncRepo = r; persist(); } });
+$('liveSync').onchange = () => {
+  if ($('liveSync').checked) {
+    if (defaultRigWarning()) toast('Heads up: the default rig is loaded, so poses will not line up in game until you Get rig.');
+    livePush();
+  } else setLiveStatus('Live sync off. Use Send to game to apply and save.');
+};
+$('btnConnect').onclick = connectGame;
+$('gSearch').addEventListener('input', renderGameList);
+$('gCat').onchange = renderGameList;
+$('btnGetRig').onclick = async () => {
+  try { await importData(await gameGet('/rig'), 'game rig'); } catch (e) { toast(e.message); return; }
+  // The glove model comes with the rig: same joints, so it can be skinned straight onto it.
+  try { applyGlove(await gameGet('/glove')); }
+  catch (e) { toast('Rig loaded, but the glove model could not be read: ' + e.message); }
+};
+
+function applyGlove(d) {
+  const hands2 = { L: d.left, R: d.right };
+  const ok = [], bad = [];
+  project.glove = project.glove || {};
+  for (const s of ['L', 'R']) {
+    const g = hands2[s];
+    if (!g?.v?.length) continue;
+    if (g.jointCount !== RIG[s].rig.joints.length) { bad.push(s); continue; }
+    project.glove[s] = g;
+    ok.push(s);
+  }
+  if (!ok.length) throw new Error(bad.length ? 'the glove has a different joint count from the loaded rig. Get the rig from the game first' : 'no glove mesh in that file');
+  rebuildHands(); refreshAll(); persist();
+  const g = project.glove[ok[0]];
+  toast(`Glove model loaded (${ok.map(s => s === 'L' ? 'left' : 'right').join(' + ')}, ${g.v.length / 3} vertices${g.texture ? ', textured' : ''}${g.weights === 'nearest' ? ', bending estimated from bones' : ''})`);
+}
+for (const side of ['L', 'R']) $('btnCap' + side).onclick = async () => {
+  try { await importData(await gameGet('/capture?side=' + side), 'game capture'); } catch (e) { toast(e.message); }
+};
+
+// ============================================================ slot actions
+$('btnRest').onclick = () => { pushUndo(); TP()[activeSlot] = restPose(SIDE(activeSlot)); refreshAll(); persist(); };
+$('btnClear').onclick = () => { pushUndo(); delete TP()[activeSlot]; select(null); refreshAll(); persist(); };
+// Frame of a target in gun space (identity for the gun and magazine).
+function frameOf(t) {
+  if (t === 'pump') return pumpFrame();
+  const p = partOf(t);
+  return p ? partFrame(p) : { p: new THREE.Vector3(), q: new THREE.Quaternion() };
+}
+$('btnCopy').onclick = () => {
+  const v = $('copyFrom').value;
+  if (!v) return toast('Pick a slot to copy from');
+  const [ft, fs] = v.split('|');
+  const src = TP(ft)[fs];
+  if (!src) return;
+  pushUndo();
+  const copy = clone(src);
+  if (ft !== target && ft !== 'mag' && target !== 'mag') {
+    // Keep the hand where it was on the gun: source frame -> gun space -> this target's frame.
+    const a = frameOf(ft), b = frameOf(target);
+    const gp = V(copy.root.p).applyQuaternion(a.q).add(a.p), gq = a.q.clone().multiply(Q(copy.root.q));
+    const ib = b.q.clone().invert();
+    copy.root = { p: arr(gp.sub(b.p).applyQuaternion(ib)), q: arr(ib.multiply(gq).normalize()) };
+  }
+  TP()[activeSlot] = copy;
+  refreshAll(); persist();
+  toast(`Copied ${ft === target ? fs : targetLabel(ft) + ' · ' + fs} → ${activeSlot}`);
+};
+$('targetSel').onchange = () => setTarget($('targetSel').value);
+$('mTypes').addEventListener('input', () => { project.mag.magTypes = $('mTypes').value; persist(); });
+$('mIds').addEventListener('input', () => { project.mag.itemIds = $('mIds').value; persist(); });
+$('btnLoadMag').onclick = async () => {
+  const id = project.compatMags?.[0];
+  if (!id) return;
+  try { applyModel(await gameGet('/model?id=' + encodeURIComponent(id))); } catch (e) { toast(e.message); }
+};
+$('btnMirror').onclick = () => {
+  const src = OTHER(activeSlot);
+  if (!TP()[src]) return;
+  pushUndo();
+  const { wp, wq } = fk(SIDE(src), TP()[src]);
+  const mp = wp.map(p => new THREE.Vector3(-p.x, p.y, p.z));
+  const mq = wq.map(q => new THREE.Quaternion(q.x, -q.y, -q.z, q.w));
+  const n = RIG[SIDE(activeSlot)].rig.joints.length;
+  if (mp.length !== n) return toast('The two hands have different joint counts');
+  const pr = TP()[src].root;
+  const rootXf = { p: new THREE.Vector3(-pr.p[0], pr.p[1], pr.p[2]), q: new THREE.Quaternion(pr.q[0], -pr.q[1], -pr.q[2], pr.q[3]) };
+  TP()[activeSlot] = poseFromWorld(SIDE(activeSlot), mp, mq, rootXf);
+  refreshAll(); persist();
+  toast(`Mirrored ${src} → ${activeSlot}. Check finger twist, as rigs differ.`);
+};
+$('curlFlip').onchange = () => { project.curlFlip[SIDE(activeSlot)] = $('curlFlip').checked; refreshFingerValues(); persist(); };
+$('btnJointReset').onclick = () => {
+  if (!selected) return;
+  pushUndo();
+  const pose = curPose();
+  if (selected.index < 0) { const r = restPose(selected.side).root; pose.root = r; }
+  else pose.local[selected.index] = RIG[selected.side].rig.joints[selected.index].q.slice();
+  refreshScene(); refreshSelection(); persist();
+};
+$('btnSelParent').onclick = () => {
+  if (!selected || selected.index < 0) return;
+  select({ side: selected.side, index: RIG[selected.side].rig.joints[selected.index].parent });
+};
+for (const id of ['eX', 'eY', 'eZ', 'pX', 'pY', 'pZ']) $(id).addEventListener('change', onNumericEdit);
+$('limitRange').onchange = () => { project.limitRange = $('limitRange').checked; refreshFingers(); persist(); };
+$('coupleTip').onchange = () => { project.coupleTip = $('coupleTip').checked; persist(); };
+$('nudgeStep').onchange = () => { project.nudgeStep = +$('nudgeStep').value; persist(); };
+
+// ============================================================ view controls
+document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+document.querySelectorAll('#spaceSeg button').forEach(b => b.onclick = () => setSpace(b.dataset.space));
+for (const id of ['vMesh', 'vCol', 'vMark']) $(id).onchange = applyVisibility;
+$('vGhost').onchange = refreshScene;
+$('vGlove').onchange = refreshScene;
+$('vBones').onchange = refreshScene;
+$('vAxes').onchange = () => select(selected);
+$('trigOn').onchange = () => {
+  $('trigVal').disabled = !$('trigOn').checked;
+  if ($('trigOn').checked) select(null);
+  refreshScene();
+};
+$('trigVal').oninput = () => { $('trigOut').textContent = (+$('trigVal').value).toFixed(2); refreshScene(); };
+
+function frameBox(box) {
+  if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3());
+  const r = Math.max(0.05, box.getSize(new THREE.Vector3()).length() * 0.6);
+  const dir = camera.position.clone().sub(orbit.target).normalize();
+  orbit.target.copy(c);
+  camera.position.copy(c).addScaledVector(dir, r / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+}
+function frameGun() { frameBox(new THREE.Box3().setFromObject(meshGroup.children.length ? meshGroup : colGroup)); }
+function frameHand() { frameBox(new THREE.Box3().setFromObject(hands[SIDE(activeSlot)].root)); }
+$('btnFrame').onclick = frameGun;
+$('btnFrameHand').onclick = frameHand;
+
+addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select')) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (e.target.closest('button') && e.key.startsWith('Arrow')) return;
+  if (!$('trigOn').checked && nudge(e.key, e.shiftKey)) { e.preventDefault(); return; }
+  if (e.key === '[') { $('btnSelParent').click(); return; }
+  if (e.key === ']') { selectChild(); return; }
+  switch (e.key.toLowerCase()) {
+    case 'w': setMode('move'); break;
+    case 'e': setMode('rotate'); break;
+    case 'r': setMode('turn'); break;
+    case 'q': setSpace(tc.space === 'local' ? 'world' : 'local'); break;
+    case 'escape': select(null); break;
+    case 'f': frameHand(); break;
+  }
+});
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ============================================================ boot
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch { saved = null; }
+project = newProject();
+if (saved && saved.format === 'gt3proj') {
+  try { loadProject(saved); } catch (e) { console.warn('Saved project unreadable, starting fresh', e); project = newProject(); loadProject(project); }
+} else loadProject(project);
+resize();
+frameGun();
+if (SERVED_BY_GAME) {
+  // Opened from the game: use its port and connect straight away.
+  $('gPort').value = location.port;
+  project.bridgePort = +location.port;
+  connectGame();
+}
+
+renderer.setAnimationLoop(() => { orbit.update(); renderer.render(scene, camera); });
+window.__posekit = { get project() { return project; }, get target() { return target; }, RIG, fk, importData, setTarget, tc, handProxy, hands, game, nameSimilarity };
+</script>
+</body>
+</html>

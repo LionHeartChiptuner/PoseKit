@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Builds against your own H3VR install and mod profile; no NuGet packages are needed.
+
+    Tell it where those are, either:
+      * on the command line:
+          dotnet build -c Release -p:GameDir="C:\Path\To\H3VR" -p:ProfileDir="C:\Path\To\r2modman\profile"
+      * or in local.props next to this file (git-ignored): copy local.props.example and edit it
+
+    GameDir    : the folder containing h3vr.exe
+    ProfileDir : the mod profile folder that contains BepInEx\ (r2modman default shown below)
+  -->
+  <Import Project="local.props" Condition="Exists('local.props')" />
+
+  <PropertyGroup>
+    <ProfileDir Condition="'$(ProfileDir)' == ''">$(APPDATA)\r2modmanPlus-local\H3VR\profiles\Default</ProfileDir>
+    <Managed>$(GameDir)\h3vr_Data\Managed</Managed>
+    <BepInExDir>$(ProfileDir)\BepInEx</BepInExDir>
+
+    <TargetFramework>net35</TargetFramework>
+    <AssemblyName>GlovesTan3PoseKit</AssemblyName>
+    <RootNamespace>GT3PoseKit</RootNamespace>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <NoStdLib>true</NoStdLib>
+    <FrameworkPathOverride>$(Managed)</FrameworkPathOverride>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <!-- The editor is built into the DLL so the plugin can serve it at http://127.0.0.1:<port>/ -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\editor\index.html" LogicalName="GT3PoseKit.editor.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="mscorlib"><HintPath>$(Managed)\mscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System"><HintPath>$(Managed)\System.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Core"><HintPath>$(Managed)\System.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(Managed)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(Managed)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(Managed)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>$(BepInExDir)\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="GlovesTan3"><HintPath>$(BepInExDir)\plugins\JerryAr-GlovesTan3\GlovesTan3.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Sodalite"><HintPath>$(BepInExDir)\plugins\nrgill28-Sodalite\Sodalite.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- Clear error instead of hundreds of "type not found" errors when the paths aren't set. -->
+  <Target Name="CheckH3VRPaths" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(GameDir)' == '' Or !Exists('$(Managed)\Assembly-CSharp.dll')"
+           Text="H3VR not found. Set GameDir to the folder containing h3vr.exe (copy local.props.example to local.props)." />
+    <Error Condition="!Exists('$(BepInExDir)\plugins\JerryAr-GlovesTan3\GlovesTan3.dll')"
+           Text="GlovesTan3 not found under $(BepInExDir)\plugins. Set ProfileDir to your mod profile folder (the one containing BepInEx), with GlovesTan3 and Sodalite installed." />
+  </Target>
+
+</Project>

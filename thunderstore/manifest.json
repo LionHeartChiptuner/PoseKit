@@ -1,0 +1,11 @@
+{
+  "name": "PoseKit",
+  "version_number": "0.1.2",
+  "website_url": "https://github.com/LionHeartChiptuner/PoseKit-Poses",
+  "description": "Pose Creator and Editor for GlovesTan3 by JerryAr.",
+  "dependencies": [
+    "BepInEx-BepInExPack_H3VR-5.4.1700",
+    "nrgill28-Sodalite-1.5.1",
+    "JerryAr-GlovesTan3-1.1.1"
+  ]
+}
