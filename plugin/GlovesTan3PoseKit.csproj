@@ -46,6 +46,7 @@
     <Reference Include="UnityEngine.UI"><HintPath>$(Managed)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp"><HintPath>$(Managed)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="BepInEx"><HintPath>$(BepInExDir)\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(BepInExDir)\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="GlovesTan3"><HintPath>$(BepInExDir)\plugins\JerryAr-GlovesTan3\GlovesTan3.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Sodalite"><HintPath>$(BepInExDir)\plugins\nrgill28-Sodalite\Sodalite.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>

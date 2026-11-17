@@ -256,6 +256,7 @@ namespace GT3PoseKit
         public string version;
         public int items;
         public bool gloves;
+        public bool freeze;
         public string poseFolder;
     }
 
@@ -270,6 +271,8 @@ namespace GT3PoseKit
         public bool onForegrip;
         public bool fromPhysics;     // captured from GlovesTan3's physical (collider) fingers
         public bool isPump;          // the hand held the gun's pump (partXf is then the pump's frame)
+        public bool isSupport;       // free hand gripping near the hand holding the gun (two-handed support grip)
+        [NonSerialized] public FistVR.FVRPhysicalObject source; // the object captured on (not saved)
         public string partPath;      // set when the hand held a sub-part (slide, bolt handle…)
         public string partType;
         public Xf partXf;            // that part's frame in gun space at capture time

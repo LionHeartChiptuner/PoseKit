@@ -164,6 +164,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       </div>
       <div class="check"><input id="liveSync" type="checkbox"><label for="liveSync" style="margin:0;color:inherit">Live sync: every edit shows up in game</label></div>
       <div id="liveStatus" class="sub"></div>
+      <div class="check"><input id="ghostOn" type="checkbox" checked><label for="ghostOn" style="margin:0;color:inherit">Ghost hands in game: show this slot on the nearest matching gun</label></div>
+      <div class="check"><input id="freezeOn" type="checkbox"><label for="freezeOn" style="margin:0;color:inherit">Freeze that gun in place (no gravity while nobody holds it)</label></div>
       <label for="syncRepo">Shared poses (GitHub repository)</label>
       <div class="row">
         <input id="syncRepo" type="text" value="LionHeartChiptuner/PoseKit-Poses" spellcheck="false" style="flex:1 1 60%">
@@ -347,7 +349,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 
 // ============================================================ constants & helpers
-const SLOT_ROWS = [['Idle','Idle'], ['Fore','Foregrip'], ['FireStart','Fire start'], ['FireEnd','Fire end']];
+const SLOT_ROWS = [['Idle','Idle'], ['Fore','Fore / Support'], ['FireStart','Fire start'], ['FireEnd','Fire end'], ['MagRelease','Mag release']];
 const SLOTS = SLOT_ROWS.flatMap(([k]) => [k + 'L', k + 'R']);
 const SIDE = s => s.slice(-1);
 const OTHER = s => s.slice(0, -1) + (SIDE(s) === 'L' ? 'R' : 'L');
@@ -651,6 +653,7 @@ function curPose(create = true) {
 let saveTimer = 0;
 function persist() {
   scheduleLivePush(); // every edit ends in persist(), so this is where live sync hooks in
+  scheduleGhost();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(project)); }
@@ -1066,7 +1069,7 @@ function refreshSlots() {
     }
   }
   $('slotNote').innerHTML = target === 'gun'
-    ? 'GlovesTan3 uses <b>Idle</b> while holding, <b>Foregrip</b> on the alternate grip, and blends <b>Fire start → end</b> with trigger pull.'
+    ? 'GlovesTan3 uses <b>Idle</b> while holding, <b>Fore / Support</b> on the foregrip (or, on guns without one such as pistols, for the free hand gripping next to the shooting hand), and blends <b>Fire start → end</b> with trigger pull. <b>Mag release</b> plays briefly when the magazine is ejected with the button.'
     : target === 'mag'
       ? 'Used while holding any magazine that matches the item IDs or magazine types below, including when you pull it out of the gun.'
       : 'Used while this part is grabbed. The pose is stored relative to the part, so the hand travels with it as you rack (axes show the part\'s frame).';
@@ -1083,6 +1086,7 @@ function refreshSlots() {
   sel.innerHTML = '<option value="">Copy pose from…</option>' + opts.map(([v, l]) => `<option value="${v.replace(/"/g, '&quot;')}">${l}</option>`).join('');
   $('btnMirror').disabled = !dict[OTHER(activeSlot)];
   refreshTargets();
+  scheduleGhost(); // the selected target/slot changed: the in-game ghost follows
 }
 
 // ---------- finger controls
@@ -1731,7 +1735,7 @@ function importCapture(c, fname) {
     const side = c.side === 'L' ? 'L' : 'R';
     // Which target the capture belongs to: a magazine, a grabbed part (slide, bolt…), or the gun itself.
     const capTarget = c.isMagazine ? 'mag' : c.isPump ? 'pump' : c.partPath ? partKey(c.partPath) : 'gun';
-    const where = c.isMagazine ? ` holding magazine (${c.magazineType})` : c.isPump ? ` on the pump (${c.partType})` : c.partPath ? ` gripping ${c.partPath.split('/').pop()} (${c.partType})` : c.onForegrip ? ' on the foregrip' : '';
+    const where = c.isMagazine ? ` holding magazine (${c.magazineType})` : c.isPump ? ` on the pump (${c.partType})` : c.partPath ? ` gripping ${c.partPath.split('/').pop()} (${c.partType})` : c.isSupport ? ' supporting the shooting hand' : c.onForegrip ? ' on the foregrip' : '';
     $('capInfo').textContent = `${c.itemId || c.objectName} · ${side === 'L' ? 'left' : 'right'} hand${where}${c.fromPhysics ? ' · from physical fingers' : ''} · ${c.joints.length} joints · ${(c.geo?.meshes || []).length} meshes`;
     $('capSlot').innerHTML = targetSlots(capTarget).filter(s => SIDE(s) === side).map(s => `<option>${s}</option>`).join('');
     $('capSlot').value = (c.onForegrip && capTarget === 'gun' ? 'Fore' : 'Idle') + side;
@@ -1936,12 +1940,15 @@ async function connectGame() {
     game.items = list.items || [];
     game.connected = true;
     project.bridgePort = +$('gPort').value; persist();
+    $('freezeOn').checked = !!st.freeze;
     setGameStatus(`Connected · ${game.items.length} items${st.gloves ? ' · gloves spawned' : ' · gloves not spawned'}`, true);
     const cats = [...new Set(game.items.map(i => i.cat))].sort();
     $('gCat').innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option${c === 'Firearm' ? ' selected' : ''}>${c}</option>`).join('');
     $('gPanel').classList.remove('hidden');
     renderGameList();
     refreshTargets();
+    ghost.last = '';
+    scheduleGhost();
   } catch (e) {
     game.connected = false;
     $('gPanel').classList.add('hidden');
@@ -2032,6 +2039,39 @@ async function livePush() {
   }
 }
 $('btnSend').onclick = sendToGame;
+
+// Ghost hands: send what's being edited (target, slot and the unsaved pose set) to the game, which shows it
+// as a see-through glove on the matching gun nearest the VR editor panel. Show-only: nothing is applied or saved.
+const ghost = { timer: 0, inFlight: false, dirty: false, last: '' };
+function scheduleGhost() {
+  if (!$('ghostOn').checked || !game.connected) return;
+  if (!ghost.timer) ghost.timer = setTimeout(() => { ghost.timer = 0; pushGhost(); }, 120);
+}
+async function pushGhost() {
+  if (ghost.inFlight) { ghost.dirty = true; return; }
+  const b = buildPoseSet();
+  if (b.error) return; // nothing posed yet, or no item ID: no ghost to show
+  const body = { format: 'gt3ghost', target, slot: activeSlot, set: b.set };
+  const sig = JSON.stringify(body);
+  if (sig === ghost.last) return;
+  ghost.inFlight = true;
+  try { await gamePost('/ghost', body); ghost.last = sig; }
+  catch { /* game gone: the game link status already says so */ }
+  finally {
+    ghost.inFlight = false;
+    if (ghost.dirty) { ghost.dirty = false; pushGhost(); }
+  }
+}
+$('ghostOn').onchange = async () => {
+  ghost.last = '';
+  if ($('ghostOn').checked) scheduleGhost();
+  else { try { await gamePost('/ghost', { format: 'gt3ghost', clear: true }); } catch { /* ignore */ } }
+};
+$('freezeOn').onchange = async () => {
+  if (!game.connected) return;
+  try { const r = await gamePost('/freeze', { format: 'gt3freeze', on: $('freezeOn').checked }); $('freezeOn').checked = !!r?.freeze; }
+  catch { /* game gone: the game link status already says so */ }
+};
 
 // ---------- Sync with GitHub repo: download the pose files in a public repository's main folder.
 // Read-only: the browser fetches from GitHub, then each pose set goes to the game like "Send to game".

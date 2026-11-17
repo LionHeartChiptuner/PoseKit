@@ -28,8 +28,10 @@ namespace GT3PoseKit
         readonly HashSet<int> _checked = new HashSet<int>();
 
         ConfigEntry<KeyCode> _keyCaptureL, _keyCaptureR, _keyReload, _keyDumpRig, _keyExportModel, _keyOpenEditor, _keyVrEditor;
-        ConfigEntry<bool> _exportMeshes, _bridgeEnabled, _allowLive, _autoCopy, _openOnStart;
-        ConfigEntry<float> _autoCopyThreshold;
+        ConfigEntry<bool> _exportMeshes, _bridgeEnabled, _allowLive, _autoCopy, _openOnStart, _supportEnabled, _ghostEnabled, _freezeDefault;
+        ConfigEntry<float> _autoCopyThreshold, _supportRange, _ghostOpacity;
+        ConfigEntry<string> _ghostColourL, _ghostColourR;
+        const string SupportName = "GT3PoseKit_SupportGrip";
         ConfigEntry<int> _maxMeshVerts, _bridgePort, _gloveTexSize;
         ModelServer _server;
 
@@ -56,8 +58,23 @@ namespace GT3PoseKit
             _allowLive = Config.Bind("Editor bridge", "AllowLiveImport", true, "Let the editor push pose sets into the running game (and save them into the pose folder when asked).");
             _autoCopy = Config.Bind("Auto copy", "InGameFallback", false, "Off by default: use the editor's \"Auto copy to similar guns\" button instead. When on, a gun without poses silently reuses the poses of the most similarly named gun that has them (e.g. G18 uses G17's).");
             _autoCopyThreshold = Config.Bind("Auto copy", "MinimumSimilarity", Similarity.DefaultThreshold, "How alike the names must be, 0 to 1. 0.9 = only number variants like G17/G18; 0.85 also allows suffixes like G17L.");
+            _supportEnabled = Config.Bind("Support grip", "Enabled", true, "On pistols (and guns without a foregrip), when H3VR two-hand stabilizes the gun (free hand empty, palm within 15 cm of the shooting hand) that hand shows its Foregrip pose: a support grip.");
+            _ghostEnabled = Config.Bind("Ghost hands", "Enabled", true, "Show a see-through glove, posed as the slot being edited (browser or VR editor), on the matching weapon nearest the VR editor panel (or your head).");
+            _ghostOpacity = Config.Bind("Ghost hands", "Opacity", 0.35f, "Ghost hand opacity, 0 to 1.");
+            _ghostColourL = Config.Bind("Ghost hands", "ColourLeft", "#3CC2CF", "Ghost colour for left-hand slots (#RRGGBB).");
+            _ghostColourR = Config.Bind("Ghost hands", "ColourRight", "#F0A052", "Ghost colour for right-hand slots (#RRGGBB).");
+            _freezeDefault = Config.Bind("Ghost hands", "FreezeWeapon", false, "Start with 'Freeze gun' on: the weapon showing the ghost floats in place (no gravity) whenever nobody holds it. Toggle it from either editor.");
+            _freezeOn = _freezeDefault.Value;
+            BindRepoConfig();
+            _supportRange = Config.Bind("Support grip", "Range", 0.08f, "Palm-to-palm distance (metres) within which the support pose shows. H3VR stabilizes up to 0.15; smaller is less sensitive. It lets go a little further out (x1.25) so it doesn't flicker.");
 
             LoadPoseSets();
+            try
+            {
+                SupportGripKeepPatch.Plugin = this;
+                new HarmonyLib.Harmony(Guid).PatchAll(typeof(SupportGripKeepPatch));
+            }
+            catch (Exception e) { Logger.LogWarning("Support grip may flicker (Harmony patch failed): " + e.Message); }
             try { RegisterWristMenu(); }
             catch (Exception e) { Logger.LogWarning("Sodalite wrist menu unavailable, hotkeys only: " + e.Message); }
             if (_bridgeEnabled.Value)
@@ -151,6 +168,57 @@ namespace GT3PoseKit
                     catch (Exception e) { Logger.LogWarning("Could not refresh the hand pose: " + e.Message); }
                 }
             }
+            UpdateSupportGrips(mm.Hands);
+        }
+
+        // Which support-grip item each glove is currently showing (by glove side).
+        readonly Dictionary<bool, HandPoseItem> _supportOn = new Dictionary<bool, HandPoseItem>();
+
+        // Support grip: while H3VR two-hand stabilizes a foregrip-less gun (empty off hand, palms within 15 cm),
+        // that hand takes its side's Foregrip pose, snapped onto the gun. Moving the hand away lets it go again.
+        void UpdateSupportGrips(FVRViveHand[] hands)
+        {
+            foreach (var sys in _systems)
+            {
+                if (sys == null) continue;
+                bool left = sys.isLeft;
+                var hand = hands[left ? 0 : 1];
+                var other = hands[left ? 1 : 0];
+                HandPoseItem active;
+                _supportOn.TryGetValue(left, out active);
+                if (active == null) _supportOn.Remove(left); // destroyed (e.g. gun despawned)
+
+                HandPoseItem want = null;
+                if (_supportEnabled.Value && hand != null && other != null)
+                {
+                    // Exactly when H3VR's own two-handed stabilization is on (off hand empty, palms within 15 cm).
+                    var gun = RootObject(other.CurrentInteractable) as FVRFireArm;
+                    if (StabilizingWith(gun, hand) && WithinSupportRange(gun, hand, active != null))
+                    {
+                        var sup = FindSupport(HpiParent(gun));
+                        if (sup != null && (left ? sup.ForeL : sup.ForeR) != null) want = sup;
+                    }
+                }
+
+                if (want != null)
+                {
+                    if (active == want && ReferenceEquals(LockedHpiField.GetValue(sys), want)) continue;
+                    LockedHpiField.SetValue(sys, want);
+                    if (LockedOnForegripField != null) LockedOnForegripField.SetValue(sys, true);
+                    if (RefreshPoseNowMethod != null)
+                    {
+                        try { RefreshPoseNowMethod.Invoke(want, new object[] { left, hand, true }); }
+                        catch (Exception e) { Logger.LogWarning("Could not show the support grip: " + e.Message); }
+                    }
+                    _supportOn[left] = want;
+                }
+                else if (active != null)
+                {
+                    if (ReferenceEquals(LockedHpiField.GetValue(sys), active)) LockedHpiField.SetValue(sys, null);
+                    if (LockedOnForegripField != null) LockedOnForegripField.SetValue(sys, false);
+                    _supportOn.Remove(left);
+                }
+            }
         }
 
         // Kept in its own method so a missing Sodalite only fails here.
@@ -198,6 +266,9 @@ namespace GT3PoseKit
             if (Input.GetKeyDown(_keyOpenEditor.Value)) OpenEditor();
             if (Input.GetKeyDown(_keyVrEditor.Value)) OpenVrEditor(null);
             if (_server != null) _server.Pump(2);
+            if (_injected.Count > 0) UpdateMagRelease();
+            try { UpdateGhost(); }
+            catch (Exception e) { if (_ghostWarned.Add("update")) Logger.LogWarning("Ghost hands: " + e.Message); }
 
             if (_byItemId.Count == 0 && _byName.Count == 0 && _magById.Count == 0 && _magByType.Count == 0) return;
             var mm = GM.CurrentMovementManager;
@@ -378,25 +449,31 @@ namespace GT3PoseKit
                     // Foregrip poses used on the pump. Once the Pump section has poses, they take over: drop this
                     // item so the next frame injects the Pump poses instead.
                     data = set.pump != null && HasPoses(set.pump.poses) ? null : ForeOnPump(set.poses, e.frame);
+                bool support = e.target == "support";
+                if (support) data = SupportPoses(set.poses);
                 bool trig = e.target == "gun" && set.hasTrigger;
                 if (!HasPoses(data))
                 {
                     Destroy(e.hpi.gameObject); _injected.Remove(e); removed++;
                     continue;
                 }
-                e.hpi.transform.SetSiblingIndex(0); // also fixes items injected before the foregrip fix
+                if (!support) e.hpi.transform.SetSiblingIndex(0); // also fixes items injected before the foregrip fix
                 if (UpdateInPlace(e.hpi, data, trig)) updated++;
                 else
                 {
                     var old = e.hpi;
                     e.hpi = InjectHpi(e.parent, data, trig, e.target == "gun" && set.useGrabPos ? set.grabPos : null);
+                    if (support) { e.hpi.gameObject.name = SupportName; e.hpi.transform.SetAsLastSibling(); }
                     Relock(old, e.hpi);
+                    foreach (var k in new List<bool>(_supportOn.Keys)) if (_supportOn[k] == old) _supportOn[k] = e.hpi;
                     // Immediate, so GlovesTan3 can't find the old item among the children later this frame.
                     DestroyImmediate(old.gameObject);
                     rebuilt++;
                 }
                 e.set = set;
             }
+            // The gun's own item must stay the first child (GlovesTan3 searches with GetComponentInChildren).
+            foreach (var e in _injected) if (e.target == "gun" && e.hpi != null) e.hpi.transform.SetSiblingIndex(0);
             _checked.Clear(); // let held objects that had no poses yet pick this set up
             _similarCache.Clear();
 
@@ -433,7 +510,8 @@ namespace GT3PoseKit
         void Reload()
         {
             foreach (var hpi in FindObjectsOfType<HandPoseItem>())
-                if (hpi != null && hpi.gameObject.name == InjectedName) Destroy(hpi.gameObject);
+                if (hpi != null && (hpi.gameObject.name == InjectedName || hpi.gameObject.name == SupportName)) Destroy(hpi.gameObject);
+            _supportOn.Clear();
             _injected.Clear();
             _checked.Clear();
             _similarCache.Clear();
@@ -618,6 +696,16 @@ namespace GT3PoseKit
                 Track(InjectHpi(parent, gunData, set.hasTrigger, set.useGrabPos ? set.grabPos : null), parent, set, "gun", false, pumpFrame);
                 Logger.LogInfo("Applied pose set '" + set.name + "' to " + phys.gameObject.name);
             }
+            // Guns without any foregrip (pistols…): the Foregrip poses become a two-handed support grip. They get
+            // their own HandPoseItem, kept after the gun's own so GlovesTan3 never mistakes it for the gun's.
+            if (SupportsStabilizationPose(phys, root) && HasForePoses(set.poses) && FindSupport(parent) == null)
+            {
+                var sup = InjectHpi(parent, SupportPoses(set.poses), false, null);
+                sup.gameObject.name = SupportName;
+                sup.transform.SetAsLastSibling();
+                Track(sup, parent, set, "support");
+                Logger.LogInfo("Support grip ready on " + phys.gameObject.name + " (uses its Foregrip poses)");
+            }
             foreach (var part in set.parts ?? new PartPoses[0])
             {
                 if (part == null || !HasPoses(part.poses)) continue;
@@ -688,6 +776,36 @@ namespace GT3PoseKit
                 list.Add(new PoseData { slot = "Fore" + side, joints = j });
             }
             return list.ToArray();
+        }
+
+        // Which guns get the support grip: pistols always (H3VR gives many of them a "_ForeGrip" grab point for
+        // two-handed holds, which shouldn't rule this out), plus any other gun without a forward grip. Rifles
+        // with a real foregrip don't, so an empty hand near their grip never jumps to the foregrip pose.
+        static bool SupportsStabilizationPose(FVRPhysicalObject phys, Transform root)
+        {
+            if (!(phys is FVRFireArm)) return false;
+            if (phys is Handgun || phys is Revolver || phys is SingleActionRevolver || phys is Derringer) return true;
+            return root.GetComponentInChildren<FVRAlternateGrip>(true) == null;
+        }
+
+        // The support-grip item's poses: each side's Foregrip pose in every slot GlovesTan3 might read.
+        static PoseData[] SupportPoses(PoseData[] gunPoses)
+        {
+            var list = new List<PoseData>();
+            foreach (var p in gunPoses ?? new PoseData[0])
+            {
+                if (p == null || (p.slot != "ForeL" && p.slot != "ForeR") || p.joints == null) continue;
+                var side = p.slot.Substring(4);
+                list.Add(new PoseData { slot = "Idle" + side, joints = p.joints });
+                list.Add(new PoseData { slot = "Fore" + side, joints = p.joints });
+            }
+            return list.ToArray();
+        }
+
+        static HandPoseItem FindSupport(Transform gunParent)
+        {
+            var t = gunParent.Find(SupportName);
+            return t != null ? t.GetComponent<HandPoseItem>() : null;
         }
 
         static bool HasForePoses(PoseData[] poses)
@@ -940,6 +1058,19 @@ namespace GT3PoseKit
             var hand = FindHand(left);
             var io = hand != null ? hand.CurrentInteractable : null;
             var phys = RootObject(io);
+            bool support = false;
+            if (phys == null && hand != null)
+            {
+                // A free hand stabilizing a gun held by the other hand (H3VR's two-handed stabilization):
+                // capture it as that gun's support (Foregrip) grip.
+                var other = FindHand(!left);
+                var gunHeld = other != null ? RootObject(other.CurrentInteractable) as FVRFireArm : null;
+                if (StabilizingWith(gunHeld, hand) && WithinSupportRange(gunHeld, hand, true))
+                {
+                    phys = gunHeld;
+                    support = true;
+                }
+            }
             if (phys == null) { error = "Hold an object with the " + (left ? "left" : "right") + " hand to capture"; return null; }
 
             bool fromPhysics;
@@ -953,7 +1084,9 @@ namespace GT3PoseKit
                 itemId = phys.ObjectWrapper != null ? phys.ObjectWrapper.ItemID : "",
                 objectName = phys.gameObject.name,
                 side = left ? "L" : "R",
-                onForegrip = io is FVRAlternateGrip,
+                onForegrip = io is FVRAlternateGrip || support,
+                isSupport = support,
+                source = phys,
                 fromPhysics = fromPhysics,
                 handRoot = root != null ? ToGunSpace(gun, root) : new Xf(),
                 joints = new Xf[src.Length],
@@ -1060,6 +1193,19 @@ namespace GT3PoseKit
             string error, v;
             if (method == "POST")
             {
+                if (path == "/freeze")
+                {
+                    try { json = HandleFreezeRequest(body); }
+                    catch (Exception e) { status = 400; json = ModelServer.Err(e.Message); }
+                    return;
+                }
+                if (path == "/ghost")
+                {
+                    // Show-only: draws the editor's current pose as a ghost; nothing is applied or saved.
+                    try { json = HandleGhostRequest(body); }
+                    catch (Exception e) { status = 400; json = ModelServer.Err(e.Message); }
+                    return;
+                }
                 if (path != "/poses") { status = 404; json = ModelServer.Err("Unknown endpoint " + path); return; }
                 if (!_allowLive.Value) { status = 403; json = ModelServer.Err("Live import is turned off in gt3posekit.loader.cfg"); return; }
                 PoseSet set;
@@ -1079,6 +1225,7 @@ namespace GT3PoseKit
                         version = Version,
                         items = IM.OD != null ? IM.OD.Count : 0,
                         gloves = FindSystem(true) != null || FindSystem(false) != null,
+                        freeze = _freezeOn,
                         poseFolder = _dir
                     });
                     return;

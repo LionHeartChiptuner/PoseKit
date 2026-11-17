@@ -12,7 +12,7 @@ namespace GT3PoseKit
     // Every change is applied live (same path as the browser editor's Live sync); Save writes the pose file.
     public partial class PoseKitPlugin
     {
-        static readonly string[] VrGunSlots = { "IdleL", "IdleR", "ForeL", "ForeR", "FireStartL", "FireStartR", "FireEndL", "FireEndR" };
+        static readonly string[] VrGunSlots = { "IdleL", "IdleR", "ForeL", "ForeR", "FireStartL", "FireStartR", "FireEndL", "FireEndR", "MagReleaseL", "MagReleaseR" };
         static readonly string[] VrOtherSlots = { "IdleL", "IdleR" };
         static readonly System.Text.RegularExpressions.Regex RackRe =
             new System.Text.RegularExpressions.Regex("slide|bolt|handle|charg|pump|fore.?end|lever|crank|cock", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -90,6 +90,7 @@ namespace GT3PoseKit
         void BuildVrPanel(GameObject panel)
         {
             _vrLabels.Clear();
+            _vrPaints.Clear();
             var canvas = panel.transform.Find("OptionsCanvas_0_Main/Canvas");
             if (canvas == null) { Logger.LogError("VR editor: panel canvas not found"); return; }
             const float scale = 0.07f, w = 37f / scale, h = 24f / scale, statusH = 62f;
@@ -120,18 +121,32 @@ namespace GT3PoseKit
                 g.LayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
                 g.LayoutGroup.constraintCount = cols;
 
-                Action<string, string, Action> add = (key, label, onClick) => g.AddChild((Sodalite.UiWidgets.ButtonWidget b) =>
+                // Each group of related buttons shares a colour (set before adding the group's buttons).
+                Color group = ColNav;
+                Action<string, string, Action> add = (key, label, onClick) =>
                 {
-                    b.ButtonText.text = label;
-                    b.ButtonText.fontSize = 13;
-                    b.ButtonText.resizeTextForBestFit = true;
-                    b.ButtonText.resizeTextMinSize = 6;
-                    b.ButtonText.resizeTextMaxSize = 13;
-                    b.AddButtonListener((s, a) => VrClick(onClick));
-                    if (key != null) _vrLabels[key] = b.ButtonText;
-                });
+                    var colour = group;
+                    g.AddChild((Sodalite.UiWidgets.ButtonWidget b) =>
+                    {
+                        b.ButtonText.text = label;
+                        b.ButtonText.fontSize = 13;
+                        b.ButtonText.resizeTextForBestFit = true;
+                        b.ButtonText.resizeTextMinSize = 6;
+                        b.ButtonText.resizeTextMaxSize = 13;
+                        b.AddButtonListener((s, a) => VrClick(onClick));
+                        // A thin dark outline keeps the white text readable on the lighter shades.
+                        var outline = b.ButtonText.gameObject.GetComponent<Outline>();
+                        if (outline == null) outline = b.ButtonText.gameObject.AddComponent<Outline>();
+                        outline.effectColor = new Color(0f, 0f, 0f, 0.65f);
+                        outline.effectDistance = new Vector2(1f, -1f);
+                        var paint = new VrPaint { pointable = b.Pointable, image = b.ButtonImage, text = b.ButtonText, colour = colour };
+                        paint.Apply(false);
+                        if (key != null) { _vrLabels[key] = b.ButtonText; _vrPaints[key] = paint; }
+                    });
+                };
 
                 // Target and slot
+                group = ColNav;
                 add(null, "< Target", () => VrCycleTarget(-1));
                 add("target", "Gun", () => VrCycleTarget(1));
                 add(null, "Target >", () => VrCycleTarget(1));
@@ -139,6 +154,7 @@ namespace GT3PoseKit
                 add("slot", "Idle R", () => VrCycleSlot(1));
                 add(null, "Slot >", () => VrCycleSlot(1));
                 // Whole pose
+                group = ColPose;
                 add(null, "Capture hands", VrCapture);
                 add(null, "Reset", VrReset);
                 add(null, "Copy Idle", VrCopyIdle);
@@ -146,15 +162,19 @@ namespace GT3PoseKit
                 add(null, "Clear slot", VrClear);
                 add(null, "Undo", VrUndoLast);
                 // Presets
+                group = ColPreset;
                 foreach (var p in new[] { "Open", "Relaxed", "Grip", "Fist", "Point", "Trigger" }) { var name = p; add(null, p, () => VrPreset(name)); }
                 // Finger
+                group = ColFinger;
                 for (int f = 0; f <= 5; f++) { int ff = f; add("finger" + f, VrRig.RoleNames[f], () => { _vrFinger = ff; if (ff == 0) _vrKnuckle = 0; }); }
                 // Knuckle, step, coupling
+                group = ColKnuckle;
                 string[] kn = { "Whole", "Base", "Mid", "Tip" };
                 for (int k = 0; k < 4; k++) { int kk = k; add("knuckle" + k, kn[k], () => { _vrKnuckle = kk; }); }
                 add("step", "Step 5", () => { _vrStepIndex = (_vrStepIndex + 1) % VrSteps.Length; });
                 add("couple", "Tip follows: on", () => { _vrCoupleTip = !_vrCoupleTip; });
                 // Rotate fingers
+                group = ColRotate;
                 add(null, "Curl -", () => VrRotate(0, -1));
                 add(null, "Curl +", () => VrRotate(0, 1));
                 add(null, "Spread -", () => VrRotate(1, -1));
@@ -162,6 +182,7 @@ namespace GT3PoseKit
                 add(null, "Twist -", () => VrRotate(2, -1));
                 add(null, "Twist +", () => VrRotate(2, 1));
                 // Move hand (mm, along the gun's axes)
+                group = ColMove;
                 add(null, "Left", () => VrMove(Vector3.left));
                 add(null, "Right", () => VrMove(Vector3.right));
                 add(null, "Down", () => VrMove(Vector3.down));
@@ -169,6 +190,7 @@ namespace GT3PoseKit
                 add(null, "Back", () => VrMove(Vector3.back));
                 add(null, "Forward", () => VrMove(Vector3.forward));
                 // Turn hand around the wrist
+                group = ColTurn;
                 add(null, "Pitch -", () => VrTurn(Vector3.right, -1));
                 add(null, "Pitch +", () => VrTurn(Vector3.right, 1));
                 add(null, "Yaw -", () => VrTurn(Vector3.up, -1));
@@ -176,14 +198,57 @@ namespace GT3PoseKit
                 add(null, "Roll -", () => VrTurn(Vector3.forward, -1));
                 add(null, "Roll +", () => VrTurn(Vector3.forward, 1));
                 // Session
+                group = ColSession;
                 add(null, "Use held gun", () => VrUseHeldGun(null));
                 add("save", "Save", VrSave);
                 add(null, "Revert", VrRevert);
                 add(null, "Auto copy", VrAutoCopy);
-                add(null, "Reload all", () => { Reload(); _vrMsg = "Reloaded every pose file"; });
+                add("freeze", "Freeze gun: off", () =>
+                {
+                    SetFreeze(!_freezeOn);
+                    _vrMsg = _freezeOn ? "Freeze on: the ghost's gun stays put when you let go" : "Freeze off: the gun has gravity again";
+                    VrRefresh();
+                });
                 add(null, "Hide panel", () => { if (_vrPanel != null) _vrPanel.SetActive(false); });
             });
         }
+
+        // Button group colours: related buttons share one.
+        static readonly Color ColNav = Hex(0x2E6FD8);     // target and slot (blue)
+        static readonly Color ColPose = Hex(0x17907F);    // whole-pose actions (teal)
+        static readonly Color ColPreset = Hex(0x7B4FC9);  // presets (purple)
+        static readonly Color ColFinger = Hex(0xD9822B);  // finger selection (orange)
+        static readonly Color ColKnuckle = Hex(0xC9A227); // knuckle selection and options (gold)
+        static readonly Color ColRotate = Hex(0xC9405A);  // curl / spread / twist (red)
+        static readonly Color ColMove = Hex(0x3C8A3F);    // move hand (green)
+        static readonly Color ColTurn = Hex(0x2A9BB8);    // turn hand (cyan)
+        static readonly Color ColSession = Hex(0x5A5F6B); // session (grey)
+
+        static Color Hex(int rgb)
+        {
+            return new Color(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f, 1f);
+        }
+
+        // One button's colouring. Active (the selected finger / knuckle) is a lighter shade of its group;
+        // hovering lightens it a little more. Text is always white.
+        class VrPaint
+        {
+            public FVRPointableButton pointable;
+            public Image image;
+            public Text text;
+            public Color colour;
+
+            public void Apply(bool active)
+            {
+                var c = active ? Color.Lerp(colour, Color.white, 0.3f) : colour;
+                var hover = Color.Lerp(c, Color.white, 0.15f);
+                if (pointable != null) { pointable.ColorUnselected = c; pointable.ColorSelected = hover; }
+                if (image != null) image.color = c;
+                if (text != null) text.color = Color.white; // always white, on every shade
+            }
+        }
+
+        readonly Dictionary<string, VrPaint> _vrPaints = new Dictionary<string, VrPaint>();
 
         static void Place(RectTransform rt, float scale, Vector2 size, Vector2 pos)
         {
@@ -586,11 +651,11 @@ namespace GT3PoseKit
         {
             target = null; slot = null; why = null;
             var hand = FindHand(left);
-            if (hand == null || hand.CurrentInteractable == null) { why = "empty hand"; return null; }
-            var held = RootObject(hand.CurrentInteractable);
+            if (hand == null) { why = "no hand"; return null; }
             string error;
-            var cap = BuildCapture(left, out error);
+            var cap = BuildCapture(left, out error); // an empty hand next to the gun captures a support grip
             if (cap == null) { why = error; return null; }
+            var held = cap.source;
             string side = left ? "L" : "R";
             if (cap.isMagazine) target = "mag";
             else if (held != _vrGun) { why = "holding something else"; return null; }
@@ -599,6 +664,7 @@ namespace GT3PoseKit
             else target = "gun";
 
             if (target != "gun") slot = "Idle" + side;
+            else if (cap.isSupport) slot = "Fore" + side; // free hand supporting a pistol: the support grip
             else if (cap.onForegrip) slot = GunHasPump() ? null : "Fore" + side;
             else if (_vrTarget == "gun" && _vrSlot.EndsWith(side) && !_vrSlot.StartsWith("Fore")) slot = _vrSlot; // keep e.g. Fire start
             else slot = "Idle" + side;
@@ -707,7 +773,7 @@ namespace GT3PoseKit
         {
             var side = slot.EndsWith("L") ? " L" : " R";
             var k = slot.Substring(0, slot.Length - 1);
-            return (k == "Fore" ? "Foregrip" : k == "FireStart" ? "Fire start" : k == "FireEnd" ? "Fire end" : k) + side;
+            return (k == "Fore" ? "Fore/Support" : k == "FireStart" ? "Fire start" : k == "FireEnd" ? "Fire end" : k == "MagRelease" ? "Mag release" : k) + side;
         }
 
         string VrTargetLabel() { return LabelOf(_vrTarget); }
@@ -730,6 +796,7 @@ namespace GT3PoseKit
 
         void VrRefresh()
         {
+            _vrFocusTime = Time.time; // the VR editor was just used: ghost hands follow it
             Text t;
             if (_vrLabels.TryGetValue("target", out t)) t.text = VrTargetLabel();
             if (_vrLabels.TryGetValue("slot", out t))
@@ -737,14 +804,23 @@ namespace GT3PoseKit
                 bool set = _vrSet != null && GetSlot(_vrSlot) != null;
                 t.text = Pretty(_vrSlot) + (set ? " *" : "");
             }
+            VrPaint paint;
             for (int f = 0; f <= 5; f++)
+            {
                 if (_vrLabels.TryGetValue("finger" + f, out t)) t.text = (f == _vrFinger ? "> " : "") + VrRig.RoleNames[f];
+                if (_vrPaints.TryGetValue("finger" + f, out paint)) paint.Apply(f == _vrFinger);
+            }
             string[] kn = { "Whole", "Base", "Mid", "Tip" };
             for (int k = 0; k < 4; k++)
+            {
                 if (_vrLabels.TryGetValue("knuckle" + k, out t)) t.text = (k == _vrKnuckle ? "> " : "") + kn[k];
+                if (_vrPaints.TryGetValue("knuckle" + k, out paint)) paint.Apply(k == _vrKnuckle);
+            }
+            if (_vrPaints.TryGetValue("couple", out paint)) paint.Apply(_vrCoupleTip);
             if (_vrLabels.TryGetValue("step", out t)) t.text = "Step " + VrSteps[_vrStepIndex] + (VrSteps[_vrStepIndex] == 1 ? "" : "") + " deg/mm";
             if (_vrLabels.TryGetValue("couple", out t)) t.text = "Tip follows: " + (_vrCoupleTip ? "on" : "off");
             if (_vrLabels.TryGetValue("save", out t)) t.text = _vrDirty ? "Save *" : "Save";
+            if (_vrLabels.TryGetValue("freeze", out t)) t.text = _freezeOn ? "Freeze gun: on" : "Freeze gun: off";
 
             if (_vrStatus != null)
             {

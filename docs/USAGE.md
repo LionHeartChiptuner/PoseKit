@@ -40,7 +40,9 @@ Everything can be done without leaving VR. Open the panel with the wrist menu bu
 | Rotate | Curl − / + · Spread − / + · Twist − / + (Whole finger: curl bends every knuckle; spread/twist turn the base) |
 | Move hand | Left / Right / Down / Up / Back / Forward, along the gun's axes |
 | Turn hand | Pitch / Yaw / Roll ±, around the wrist |
-| Session | **Use held gun** (switch to the gun you're holding; saves the previous one) · **Save** · **Revert** (back to the saved file) · **Auto copy** (add similarly named guns) · **Reload all** · **Hide panel** |
+| Session | **Use held gun** (switch to the gun you're holding; saves the previous one) · **Save** · **Revert** (back to the saved file) · **Auto copy** (add similarly named guns) · **Freeze gun** (see Ghost hands) · **Hide panel** |
+
+Buttons are colour-coded by group: blue = target & slot, teal = whole-pose actions, purple = presets, orange = finger, gold = knuckle & options, red = rotate, green = move hand, cyan = turn hand, grey = session. The selected finger and knuckle (and "Tip follows" when on) show in a lighter shade of their colour.
 
 Placing the hand naturally:
 
@@ -89,6 +91,27 @@ The bridge only accepts these updates from pages that send the `X-PoseKit` heade
 * A review list shows every pose set. **New** ones are ticked. Ones that would **replace** a pose set you already have (same name or same guns) are left unticked, so your own edits aren't overwritten unless you choose to. Files that aren't valid pose sets are skipped.
 * **Download ticked** sends each one to the game like *Send to game*: it applies straight away and is saved into `GlovesTan3Poses`.
 * Unauthenticated GitHub requests are limited to 60 per hour; the editor says when the limit is reached.
+
+#### Update check when the game starts
+
+When H3VR starts, PoseKit checks the same repository for pose files you don't have yet, or newer versions of ones you synced. If it finds any, a window appears in front of you in game, listing what's new or updated:
+
+* **Sync now** downloads them into your pose folder and applies them straight away. It never touches poses you made or edited yourself.
+* **Sync + replace mine** (shown only when the repo has poses for guns you've posed yourself) also takes the repo's version of those. Yours are copied to `GlovesTan3Poses\backup\<date>` first.
+* **Not now** asks again next time you start the game.
+* **Skip this update** doesn't ask again until the repo changes.
+
+Files that aren't pose sets (such as `rig.json`) are ignored. It only reads from GitHub. In `gt3posekit.loader.cfg` under `[Pose repo]`: `CheckOnStart` (default on) and `Repo` (default `LionHeartChiptuner/PoseKit-Poses`). What was last synced is remembered in `GlovesTan3Poses\repo-sync-state.dat`.
+
+### Ghost hands
+
+A see-through copy of the GlovesTan3 glove shows, in game, the slot you're editing, so you can check poses at true scale in VR while working in the browser.
+
+* **What's shown:** the target and slot selected in whichever editor you used last, the browser editor or the VR editor. From the browser it's your current, unsaved pose. The ghost is display-only: nothing is applied or saved until you use Send to game or Live sync.
+* **Where:** on the matching weapon (by item ID or object name) nearest the VR editor panel, or nearest your head when the panel isn't open. The gun doesn't need to be held: lay it on a table next to the panel. Part, Pump and Magazine targets appear on that part, the pump, or the nearest matching magazine.
+* **Toggle:** **Ghost hands in game** in the browser editor's game link panel. In `gt3posekit.loader.cfg` under `[Ghost hands]`: `Enabled`, `Opacity` (default 0.35), and `ColourLeft` / `ColourRight` (`#RRGGBB`).
+* **Freeze gun in place:** **Freeze that gun in place** in the browser editor, or **Freeze gun** in the VR editor. The weapon showing the ghost loses gravity and stays exactly where it is whenever nobody holds it, so you can let go of it mid-air and pose around it. Grabbing it works as normal; letting go freezes it again where you released it. A magazine loaded in a gun freezes the gun. Turning it off, or the ghost moving to another weapon, gives the weapon its normal physics back. Config default: `FreezeWeapon` (off).
+* Needs the gloves spawned, since the ghost uses the real glove model. Empty slots show no ghost.
 
 Parts whose meshes the game has locked (Read/Write disabled) show up as solid bounding boxes, so the gun's shape is still visible.
 
@@ -166,6 +189,28 @@ These are the slots GlovesTan3 1.1.1 actually uses:
 | `FireStartL/R` → `FireEndL/R` | blended by trigger pull (if *Blend trigger finger* is on) |
 
 A side with no `Idle` pose falls back to GlovesTan3's physical fingers.
+
+### Mag release
+
+The gun's **Mag release** slots (L/R) hold the pose for pressing the magazine release, for example the thumb on the button.
+
+* When the magazine leaves a held gun by the button, the holding hand blends into this pose and back over about half a second. The blend takes 0.08 s in, holds for 0.22 s, and takes 0.18 s out.
+* It doesn't play if the other hand pulls the magazine out.
+* GlovesTan3 has no working slot for this, so PoseKit plays it by blending the hand's current Idle / Fire poses for that side, then restores them.
+* **VR editor:** while the Mag release slot is selected, the gun you're holding shows that pose continuously, so you can see what you're editing.
+* Capture works as usual: select the Mag release slot, place your thumb, press **Capture hands**.
+
+### Support grip (pistols and other guns without a foregrip)
+
+On guns with no foregrip, the **Fore / Support** slot is the two-handed support grip. It follows H3VR's own two-handed stabilization:
+
+* While one hand holds the gun, bring your empty free hand right next to it, palm within 8 cm of the shooting hand's palm (the `Range` setting). No button is needed. H3VR must also be stabilizing the gun, which it does up to 15 cm.
+* That hand then shows the gun's Fore pose for its side, snapped onto the gun.
+* Move the hand away and it lets go. Pressing grip on the gun still grabs it and swaps hands, as normal.
+* To pose it, stabilize as above and capture: **Capture hands** in VR, or Capture L/R. It goes into Fore L/R.
+* Pistols (handguns, revolvers, derringers) always get it, even when H3VR gives them a `_ForeGrip` grab point for two-handed holds. Other guns get it only when they have no forward grip. Rifles with a foregrip or a pump are unaffected: there, Fore is the foregrip as before.
+* A hand holding a flashlight or magazine still stabilizes in H3VR, but keeps its own pose.
+* Settings in `gt3posekit.loader.cfg`: `[Support grip] Range` (default 0.08 m, up to 0.15; smaller is less sensitive; it lets go at 1.25× that) and `Enabled`.
 
 ### Slide racking and other parts
 
