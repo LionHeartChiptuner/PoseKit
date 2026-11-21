@@ -12,11 +12,13 @@ namespace GT3PoseKit
 {
     [BepInPlugin(Guid, "GlovesTan3 PoseKit", Version)]
     [BepInProcess("h3vr.exe")]
+    [BepInDependency(H3MPGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public partial class PoseKitPlugin : BaseUnityPlugin
     {
         public const string Guid = "gt3posekit.loader";
         public const string Version = "1.0.0";
         const string InjectedName = "GT3PoseKit_HandPoseItem";
+        const string H3MPGuid = "VIP.TommySoucy.H3MP";
 
         static readonly string[] Slots = { "IdleL", "IdleR", "ForeL", "ForeR", "FireStartL", "FireStartR", "FireEndL", "FireEndR" };
 
@@ -44,7 +46,7 @@ namespace GT3PoseKit
 
             _keyCaptureL = Config.Bind("Keys", "CaptureLeft", KeyCode.F5, "Capture the left hand's pose on the object it holds.");
             _keyCaptureR = Config.Bind("Keys", "CaptureRight", KeyCode.F6, "Capture the right hand's pose on the object it holds.");
-            _keyReload = Config.Bind("Keys", "ReloadPoses", KeyCode.F7, "Reload every pose file and re-apply to spawned objects.");
+            _keyReload = Config.Bind("Keys", "ReloadPoses", KeyCode.F7, "Rescan Folders: re-read every pose file, the empty-hand poses and glove skins, and re-apply to spawned objects.");
             _keyDumpRig = Config.Bind("Keys", "DumpRig", KeyCode.F8, "Write the GlovesTan3 hand skeleton to rig.json.");
             _exportMeshes = Config.Bind("Capture", "ExportMeshes", true, "Include readable gun meshes in captures (the editor shows them as reference).");
             _maxMeshVerts = Config.Bind("Capture", "MaxMeshVertices", 120000, "Upper limit on total exported mesh vertices per capture or model.");
@@ -66,6 +68,8 @@ namespace GT3PoseKit
             _freezeDefault = Config.Bind("Ghost hands", "FreezeWeapon", false, "Start with 'Freeze gun' on: the weapon showing the ghost floats in place (no gravity) whenever nobody holds it. Toggle it from either editor.");
             _freezeOn = _freezeDefault.Value;
             BindRepoConfig();
+            BindEmptyConfig(); BindSkinConfig();
+            LoadEmptyHand();
             _supportRange = Config.Bind("Support grip", "Range", 0.08f, "Palm-to-palm distance (metres) within which the support pose shows. H3VR stabilizes up to 0.15; smaller is less sensitive. It lets go a little further out (x1.25) so it doesn't flicker.");
 
             LoadPoseSets();
@@ -75,6 +79,29 @@ namespace GT3PoseKit
                 new HarmonyLib.Harmony(Guid).PatchAll(typeof(SupportGripKeepPatch));
             }
             catch (Exception e) { Logger.LogWarning("Support grip may flicker (Harmony patch failed): " + e.Message); }
+            try
+            {
+                EmptyHandPatch.Plugin = this;
+                new HarmonyLib.Harmony(Guid + ".emptyhand").PatchAll(typeof(EmptyHandPatch));
+            }
+            catch (Exception e) { Logger.LogWarning("Empty hand pose unavailable (Harmony patch failed): " + e.Message); }
+            try
+            {
+                PalmedMagPatch.Plugin = this;
+                new HarmonyLib.Harmony(Guid + ".palmedmag").PatchAll(typeof(PalmedMagPatch));
+            }
+            catch (Exception e) { Logger.LogWarning("Palmed magazine placement unavailable (Harmony patch failed): " + e.Message); }
+            try
+            {
+                SpawnGuardPatch.Log = Logger;
+                new HarmonyLib.Harmony(Guid + ".spawnguard").PatchAll(typeof(SpawnGuardPatch));
+            }
+            catch (Exception e) { Logger.LogWarning("Glove spawn guard unavailable (Harmony patch failed): " + e.Message); }
+            if (BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(H3MPGuid))
+            {
+                try { StartH3MPGloveSync(); }
+                catch (Exception e) { Logger.LogWarning("H3MP glove sync unavailable (other players won't see your gloves): " + e.Message); }
+            }
             try { RegisterWristMenu(); }
             catch (Exception e) { Logger.LogWarning("Sodalite wrist menu unavailable, hotkeys only: " + e.Message); }
             if (_bridgeEnabled.Value)
@@ -91,6 +118,22 @@ namespace GT3PoseKit
                 catch (Exception e) { _server = null; Logger.LogError("Editor bridge could not start on port " + _bridgePort.Value + ": " + e.Message); }
             }
             Logger.LogInfo("Pose folder: " + _dir);
+        }
+
+        // Kept in its own method so H3MP's types are only loaded when H3MP is installed.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void StartH3MPGloveSync()
+        {
+            var send = Config.Bind("Multiplayer", "ShareGloves", true, "In H3MP, show your GlovesTan3 gloves to other players (they need PoseKit and GlovesTan3 too).");
+            var show = Config.Bind("Multiplayer", "ShowOthersGloves", true, "In H3MP, show other players' GlovesTan3 gloves on their hands.");
+            var rate = Config.Bind("Multiplayer", "SendRate", 20, "How many times per second your glove pose is sent to other players (5 to 60).");
+            H3MPGloveSync.SendEnabled = send.Value;
+            H3MPGloveSync.ShowEnabled = show.Value;
+            H3MPGloveSync.SendInterval = 1f / Mathf.Clamp(rate.Value, 5, 60);
+            send.SettingChanged += (s, e) => H3MPGloveSync.SendEnabled = send.Value;
+            show.SettingChanged += (s, e) => H3MPGloveSync.ShowEnabled = show.Value;
+            rate.SettingChanged += (s, e) => H3MPGloveSync.SendInterval = 1f / Mathf.Clamp(rate.Value, 5, 60);
+            H3MPGloveSync.Install(gameObject, Logger, new HarmonyLib.Harmony(Guid + ".h3mp"));
         }
 
         // The editor page: an index.html next to the DLL wins (handy for updates), else the built-in copy.
@@ -143,7 +186,12 @@ namespace GT3PoseKit
         void LateUpdate()
         {
             if (LockedHpiField == null) return;
-            if (_systems == null || Time.time - _systemsAt > 2f) { _systems = FindObjectsOfType<HandsPoseSystem>(); _systemsAt = Time.time; }
+            bool refreshed = false;
+            if (_systems == null || Time.time - _systemsAt > 2f) { _systems = FindObjectsOfType<HandsPoseSystem>(); _systemsAt = Time.time; refreshed = true; }
+            try { UpdateGloveSkin(refreshed); }
+            catch (Exception e) { if (_ghostWarned.Add("skin:" + e.Message)) Logger.LogWarning("Glove skin: " + e.Message); }
+            try { UpdateEmptyHands(); }
+            catch (Exception e) { if (_ghostWarned.Add("empty")) Logger.LogWarning("Empty hand pose: " + e.Message); }
             var mm = GM.CurrentMovementManager;
             if (mm == null || mm.Hands == null || mm.Hands.Length < 2) return;
             foreach (var sys in _systems)
@@ -227,11 +275,13 @@ namespace GT3PoseKit
         {
             AddButton("PoseKit: Capture L", h => Capture(true));
             AddButton("PoseKit: Capture R", h => Capture(false));
-            AddButton("PoseKit: Reload poses", h => Reload());
+            AddButton("PoseKit: Rescan Folders", h => Reload());
             AddButton("PoseKit: Dump rig", h => DumpRig());
             AddButton("PoseKit: Export held model", h => ExportHeldModel());
             AddButton("PoseKit: Open editor", h => OpenEditor());
             AddButton("PoseKit: VR editor", h => OpenVrEditor(h));
+            AddButton("PoseKit: Next glove skin", h => NextSkin());
+            AddButton("PoseKit: Search for glove skins", h => SearchSkins());
         }
 
         // Opens the editor the plugin serves in the desktop's default browser.
@@ -267,6 +317,7 @@ namespace GT3PoseKit
             if (Input.GetKeyDown(_keyVrEditor.Value)) OpenVrEditor(null);
             if (_server != null) _server.Pump(2);
             if (_injected.Count > 0) UpdateMagRelease();
+            if (_injected.Count > 0) UpdateRetention();
             try { UpdateGhost(); }
             catch (Exception e) { if (_ghostWarned.Add("update")) Logger.LogWarning("Ghost hands: " + e.Message); }
 
@@ -516,7 +567,9 @@ namespace GT3PoseKit
             _checked.Clear();
             _similarCache.Clear();
             LoadPoseSets();
-            Notify("Poses reloaded (" + (_byItemId.Count + _byName.Count) + " gun keys, " + (_magById.Count + _magByType.Count) + " magazine keys)");
+            LoadEmptyHand();
+            ReloadSkin();
+            Notify("Rescanned folders (" + (_byItemId.Count + _byName.Count) + " gun keys, " + (_magById.Count + _magByType.Count) + " magazine keys)");
         }
 
         PoseSet FindSet(FVRPhysicalObject phys)
@@ -1123,7 +1176,7 @@ namespace GT3PoseKit
                 else cap.onForegrip = true;
             }
             var mag = phys as FVRFireArmMagazine;
-            if (mag != null) { cap.isMagazine = true; cap.magazineType = mag.MagazineType.ToString(); }
+            if (mag != null) { cap.isMagazine = true; cap.magazineType = mag.MagazineType.ToString(); cap.magPalmed = HasPalmedPartner(mag); }
             return cap;
         }
 

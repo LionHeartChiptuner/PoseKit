@@ -1,4 +1,4 @@
-THIS README WAS MADE WITH THE ASSISTANCE OF AI. I'm not very good at them, sorry in advance. AI was used to ASSIST my own programming, I know HTML but I'm a novice with C#.
+THIS README WAS MADE WITH THE ASSISTANCE OF AI. I'm not very good at them, sorry in advance.
 
 # PoseKit
 

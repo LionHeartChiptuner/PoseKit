@@ -75,7 +75,7 @@ namespace GT3PoseKit
         GhostFocus CurrentGhostFocus()
         {
             GhostFocus vr = null;
-            if (_vrPanel != null && _vrPanel.activeInHierarchy && _vrSet != null)
+            if (_vrPanel != null && _vrPanel.activeInHierarchy && _vrSet != null && _vrTarget != "empty")
                 vr = new GhostFocus { set = _vrSet, target = _vrTarget, slot = _vrSlot, time = _vrFocusTime, version = null };
             if (vr != null && (_ghostBrowser == null || vr.time >= _ghostBrowser.time)) return vr;
             return _ghostBrowser;
@@ -90,7 +90,9 @@ namespace GT3PoseKit
             if (focus == null || focus.set == null) { HideGhost(); return; }
 
             PoseData pd = FindPose(PosesFor(focus.set, focus.target), focus.slot);
-            if (pd == null) { HideGhost(); return; }
+            // The ghost palmed magazine still shows on a Retention slot that has no hand pose yet.
+            bool retain = focus.target == "mag" && focus.slot != null && focus.slot.StartsWith("Retain");
+            if (pd == null && !retain) { HideGhost(); return; }
 
             // Pick the weapon (re-scanned twice a second, or straight away when the focus changes).
             string scanKey = SetKey(focus.set) + "|" + focus.target;
@@ -101,6 +103,15 @@ namespace GT3PoseKit
                 _ghostScanAt = Time.time + 0.5f;
             }
             if (_ghostOn == null) { HideGhost(); return; }
+
+            try { UpdateGhostMag(focus, _ghostOn, pd); }
+            catch (Exception e) { HideGhostMag(); if (_ghostWarned.Add("ghostmag:" + e.Message)) Logger.LogWarning("Ghost palmed magazine: " + e.Message); }
+            if (pd == null)
+            {
+                if (_ghostObj != null && _ghostObj.activeSelf) _ghostObj.SetActive(false);
+                UpdateFreeze(_ghostOn);
+                return;
+            }
 
             Transform frame = GhostFrame(_ghostOn, focus.set, focus.target);
             if (frame == null) { HideGhost(); return; }
@@ -130,6 +141,7 @@ namespace GT3PoseKit
         void HideGhost()
         {
             if (_ghostObj != null && _ghostObj.activeSelf) _ghostObj.SetActive(false);
+            HideGhostMag();
             UpdateFreeze(null);
         }
 

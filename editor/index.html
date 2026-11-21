@@ -171,6 +171,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
         <input id="syncRepo" type="text" value="LionHeartChiptuner/PoseKit-Poses" spellcheck="false" style="flex:1 1 60%">
       </div>
       <button id="btnSyncRepo" style="width:100%;margin-top:6px" title="Download the latest pose files from the repository's main folder into the game">Sync with GitHub repo</button>
+      <button id="btnSyncPRs" style="width:100%;margin-top:6px" title="Download the pose files proposed in the repository's open pull requests (not merged yet) to try them out">Sync test poses (pull requests)</button>
       <div id="syncStatus" class="sub" style="margin-top:4px"></div>
       <div class="row" style="margin-top:4px">
         <button id="btnGetRig" title="Pull the GlovesTan3 hand skeleton from the game">Get rig</button>
@@ -208,7 +209,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <li>In game, spawn the gloves, hold the gun and press <b>PoseKit: Capture L/R</b> (or <span class="kbd">F5</span>/<span class="kbd">F6</span>).</li>
       <li>Import the capture from <code>BepInEx/config/GlovesTan3Poses/captures</code>.</li>
       <li>Refine each slot here, then <b>Export for game</b> into <code>BepInEx/config/GlovesTan3Poses</code>.</li>
-      <li>Press <b>PoseKit: Reload poses</b> (<span class="kbd">F7</span>) and grab the gun again.</li>
+      <li>Press <b>PoseKit: Rescan Folders</b> (<span class="kbd">F7</span>) and grab the gun again.</li>
     </ol>
   </aside>
 
@@ -351,6 +352,8 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // ============================================================ constants & helpers
 const SLOT_ROWS = [['Idle','Idle'], ['Fore','Fore / Support'], ['FireStart','Fire start'], ['FireEnd','Fire end'], ['MagRelease','Mag release']];
 const SLOTS = SLOT_ROWS.flatMap(([k]) => [k + 'L', k + 'R']);
+const MAG_ROWS = [['Idle', 'Holding'], ['Retain', 'Retention']];
+const MAG_SLOTS = ['IdleL', 'IdleR', 'RetainL', 'RetainR'];
 const SIDE = s => s.slice(-1);
 const OTHER = s => s.slice(0, -1) + (SIDE(s) === 'L' ? 'R' : 'L');
 const $ = id => document.getElementById(id);
@@ -587,7 +590,7 @@ function newProject() {
     limitRange: true, coupleTip: false, nudgeStep: 2,
     poses: {},   // gun poses
     parts: [],   // [{ path, name, type, rest: {p, r} (Unity, gun space), poses: {} }]
-    mag: { itemIds: '', magTypes: '', geo: null, name: '', poses: {} },
+    mag: { itemIds: '', magTypes: '', geo: null, name: '', poses: {}, palmed: [] },
     pump: { rest: null, poses: {} }, // the forward pump: rest = its frame in gun space (Unity), poses relative to it
     compatMags: [],
   };
@@ -603,7 +606,7 @@ function TP(t = target) {
   if (t === 'pump') return project.pump.poses;
   return partOf(t)?.poses || {};
 }
-const targetSlots = (t = target) => t === 'gun' ? SLOTS : ['IdleL', 'IdleR'];
+const targetSlots = (t = target) => t === 'gun' ? SLOTS : t === 'mag' ? MAG_SLOTS : ['IdleL', 'IdleR'];
 function allPoseDicts() { return [project.poses, project.mag.poses, project.pump.poses, ...project.parts.map(p => p.poses)]; }
 // The pump's frame at rest: from the gun model when loaded, else from the capture that posed it.
 const pumpInfo = () => project.geo?.pump?.path ? project.geo.pump : null;
@@ -631,7 +634,7 @@ function setRig(side, rig) {
   project.rig[side] = rig;
   RIG[side] = { rig, info: analyseRig(rig) };
   // Drop poses whose joint count no longer matches this rig.
-  for (const dict of allPoseDicts()) for (const s of SLOTS) {
+  for (const dict of allPoseDicts()) for (const s of [...SLOTS, 'RetainL', 'RetainR']) {
     if (SIDE(s) === side && dict[s] && dict[s].local.length !== rig.joints.length) delete dict[s];
   }
 }
@@ -1043,7 +1046,7 @@ function refreshSlots() {
   const box = $('slots');
   const dict = TP();
   box.innerHTML = '<span></span><span class="hdr">Left</span><span class="hdr">Right</span>';
-  const rows = target === 'gun' ? SLOT_ROWS : [['Idle', target === 'mag' ? 'Holding' : 'Grabbing']];
+  const rows = target === 'gun' ? SLOT_ROWS : target === 'mag' ? MAG_ROWS : [['Idle', 'Grabbing']];
   for (const [k, label] of rows) {
     const l = document.createElement('span'); l.className = 'lbl'; l.textContent = label; box.append(l);
     for (const s of ['L', 'R']) {
@@ -1071,9 +1074,9 @@ function refreshSlots() {
   $('slotNote').innerHTML = target === 'gun'
     ? 'GlovesTan3 uses <b>Idle</b> while holding, <b>Fore / Support</b> on the foregrip (or, on guns without one such as pistols, for the free hand gripping next to the shooting hand), and blends <b>Fire start → end</b> with trigger pull. <b>Mag release</b> plays briefly when the magazine is ejected with the button.'
     : target === 'mag'
-      ? 'Used while holding any magazine that matches the item IDs or magazine types below, including when you pull it out of the gun.'
+      ? 'Used while holding any magazine that matches the item IDs or magazine types below, including when you pull it out of the gun. <b>Retention</b> is used while a second magazine is palmed in the same hand (a retention reload; needs Mag palming on in H3VR\x27s options). Where the palmed magazine sits is set in the VR editor (Adjust: palmed mag).'
       : 'Used while this part is grabbed. The pose is stored relative to the part, so the hand travels with it as you rack (axes show the part\'s frame).';
-  const slotName = target === 'gun' ? SLOT_ROWS.find(r => activeSlot.startsWith(r[0]))[1] : (target === 'mag' ? 'Holding' : 'Grabbing');
+  const slotName = target === 'gun' ? SLOT_ROWS.find(r => activeSlot.startsWith(r[0]))[1] : target === 'mag' ? MAG_ROWS.find(r => activeSlot.startsWith(r[0]))[1] : 'Grabbing';
   $('hudSlot').textContent = `${targetLabel()} · ${slotName} · ${SIDE(activeSlot) === 'L' ? 'Left' : 'Right'} hand${dict[activeSlot] ? '' : ' (empty: showing rest pose)'}`;
   const sel = $('copyFrom');
   // Copy within this target, or another target's same-side pose (handy as a starting point).
@@ -1630,8 +1633,8 @@ function buildPoseSet() {
   const parts = project.parts
     .map(p => ({ name: p.name, path: p.path, type: p.type, poses: exportSlots(p.poses, ['IdleL', 'IdleR']) }))
     .filter(p => p.poses.length);
-  const magPoses = exportSlots(project.mag.poses, ['IdleL', 'IdleR']);
-  const magazine = { itemIds: splitList(project.mag.itemIds), magazineTypes: splitList(project.mag.magTypes), poses: magPoses };
+  const magPoses = exportSlots(project.mag.poses, MAG_SLOTS);
+  const magazine = { itemIds: splitList(project.mag.itemIds), magazineTypes: splitList(project.mag.magTypes), poses: magPoses, palmed: project.mag.palmed || [] };
   const pumpPoses = exportSlots(project.pump.poses, ['IdleL', 'IdleR']);
   const total = poses.length + parts.reduce((n, p) => n + p.poses.length, 0) + magPoses.length + pumpPoses.length;
   if (!total) return { error: 'Nothing to send yet: pose at least one slot' };
@@ -1708,7 +1711,8 @@ async function importData(d, fname) {
       }
       if (d.pump?.poses?.length) load(project.pump.poses, d.pump.poses, ['IdleL', 'IdleR']);
       if (d.magazine) {
-        load(project.mag.poses, d.magazine.poses, ['IdleL', 'IdleR']);
+        load(project.mag.poses, d.magazine.poses, MAG_SLOTS);
+        if (Array.isArray(d.magazine.palmed)) project.mag.palmed = d.magazine.palmed; // palmed-magazine placement, set in the VR editor
         if (!project.mag.itemIds) project.mag.itemIds = (d.magazine.itemIds || []).join(', ');
         if (!project.mag.magTypes) project.mag.magTypes = (d.magazine.magazineTypes || []).join(', ');
       }
@@ -1738,7 +1742,7 @@ function importCapture(c, fname) {
     const where = c.isMagazine ? ` holding magazine (${c.magazineType})` : c.isPump ? ` on the pump (${c.partType})` : c.partPath ? ` gripping ${c.partPath.split('/').pop()} (${c.partType})` : c.isSupport ? ' supporting the shooting hand' : c.onForegrip ? ' on the foregrip' : '';
     $('capInfo').textContent = `${c.itemId || c.objectName} · ${side === 'L' ? 'left' : 'right'} hand${where}${c.fromPhysics ? ' · from physical fingers' : ''} · ${c.joints.length} joints · ${(c.geo?.meshes || []).length} meshes`;
     $('capSlot').innerHTML = targetSlots(capTarget).filter(s => SIDE(s) === side).map(s => `<option>${s}</option>`).join('');
-    $('capSlot').value = (c.onForegrip && capTarget === 'gun' ? 'Fore' : 'Idle') + side;
+    $('capSlot').value = (c.onForegrip && capTarget === 'gun' ? 'Fore' : c.isMagazine && c.magPalmed ? 'Retain' : 'Idle') + side;
     $('capGeo').checked = !!c.geo;
     const matchList = c.isMagazine ? project.mag.itemIds : project.itemIds;
     $('capMatch').checked = !!c.itemId && !splitList(matchList).includes(c.itemId) && !(c.isMagazine && splitList(project.mag.magTypes).includes(c.magazineType));
@@ -2105,21 +2109,52 @@ async function githubJson(url) {
   return data;
 }
 let syncRows = [];
-async function syncWithRepo() {
+// Pose files in the main folder of the default branch.
+async function listMainFiles(repo) {
+  const listing = await githubJson(`https://api.github.com/repos/${repo}/contents/`);
+  const files = (Array.isArray(listing) ? listing : []).filter(f => f.type === 'file' && /\.json$/i.test(f.name) && f.download_url);
+  if (!files.length) throw new Error(`No .json pose files in the main folder of ${repo}.`);
+  return files.map(f => ({ name: f.name, download_url: f.download_url, html_url: f.html_url }));
+}
+// Test poses: pose files added or changed by the repository's open pull requests (not merged yet), read
+// from each PR's own branch. Read-only, like the main sync.
+async function listPullRequestFiles(repo) {
+  const pulls = await githubJson(`https://api.github.com/repos/${repo}/pulls?state=open&per_page=30`);
+  if (!Array.isArray(pulls) || !pulls.length) throw new Error(`${repo} has no open pull requests.`);
+  const out = [];
+  for (const pr of pulls) {
+    setSyncStatus(`Reading pull request #${pr.number}…`);
+    const head = pr.head?.repo?.full_name, sha = pr.head?.sha;
+    if (!head || !sha) continue; // the fork behind it was deleted
+    const files = await githubJson(`https://api.github.com/repos/${repo}/pulls/${pr.number}/files?per_page=100`);
+    for (const f of Array.isArray(files) ? files : []) {
+      if (f.status === 'removed' || !/\.json$/i.test(f.filename) || f.filename.includes('/')) continue; // main folder only, like the main sync
+      out.push({
+        name: f.filename,
+        download_url: `https://raw.githubusercontent.com/${head}/${sha}/${encodeURIComponent(f.filename)}`,
+        html_url: pr.html_url,
+        pr: { number: pr.number, title: pr.title || '', user: pr.user?.login || '' },
+      });
+    }
+  }
+  if (!out.length) throw new Error(`None of the ${pulls.length} open pull request(s) in ${repo} add or change pose files.`);
+  return out;
+}
+async function syncWithRepo(fromPRs) {
   const repo = parseRepo($('syncRepo').value);
   if (!repo) { toast('Enter the repository as owner/name, e.g. ' + DEFAULT_SYNC_REPO); $('syncRepo').focus(); return; }
   if (!game.connected) { toast('Connect to the game first: synced poses are saved into the game\'s pose folder'); return; }
   project.syncRepo = repo; persist();
-  $('btnSyncRepo').disabled = true;
+  $('btnSyncRepo').disabled = $('btnSyncPRs').disabled = true;
   try {
-    setSyncStatus(`Reading ${repo}…`);
-    const listing = await githubJson(`https://api.github.com/repos/${repo}/contents/`);
-    const files = (Array.isArray(listing) ? listing : []).filter(f => f.type === 'file' && /\.json$/i.test(f.name) && f.download_url);
-    if (!files.length) { setSyncStatus(`No .json pose files in the main folder of ${repo}.`, false); return; }
+    setSyncStatus(`Reading ${repo}${fromPRs ? ' pull requests' : ''}…`);
+    let files;
+    try { files = fromPRs ? await listPullRequestFiles(repo) : await listMainFiles(repo); }
+    catch (e) { setSyncStatus(e.message, false); return; }
     setSyncStatus(`Downloading ${files.length} file(s)…`);
     const local = (await gameGet('/posesets')).sets || [];
     syncRows = await Promise.all(files.map(async f => {
-      const row = { file: f.name, url: f.html_url, on: false };
+      const row = { file: f.name, url: f.html_url, pr: f.pr, on: false };
       try {
         const res = await fetch(f.download_url, { cache: 'no-store' });
         if (!res.ok) throw new Error(`download failed (${res.status})`);
@@ -2138,13 +2173,15 @@ async function syncWithRepo() {
       } catch (e) { row.error = e.message; }
       return row;
     }));
-    showSyncDialog(repo);
+    showSyncDialog(repo, fromPRs);
   } catch (e) { setSyncStatus(e.message, false); toast(e.message); }
-  finally { $('btnSyncRepo').disabled = false; }
+  finally { $('btnSyncRepo').disabled = $('btnSyncPRs').disabled = false; }
 }
-function showSyncDialog(repo) {
+function showSyncDialog(repo, fromPRs) {
   const ok = syncRows.filter(r => !r.error);
-  $('syncInfo').textContent = `${ok.length} pose set(s) in ${repo}. New ones are ticked. Ones that would replace a pose set you already have are not: tick them to replace yours.`;
+  $('syncInfo').textContent = fromPRs
+    ? `${ok.length} test pose set(s) from open pull requests in ${repo}. These aren't merged yet, so they may change. New ones are ticked. Ones that would replace a pose set you already have are not: tick them to replace yours.`
+    : `${ok.length} pose set(s) in ${repo}. New ones are ticked. Ones that would replace a pose set you already have are not: tick them to replace yours.`;
   const box = $('syncList');
   box.innerHTML = '';
   const rigJoints = RIG.R.rig.source === 'game' ? RIG.R.rig.joints.length : null;
@@ -2164,6 +2201,7 @@ function showSyncDialog(repo) {
     if (r.error) sub.textContent = `${r.file}: skipped, ${r.error}`;
     else {
       const bits = [r.guns.length ? `${r.guns.length} gun(s): ${r.guns.slice(0, 4).join(', ')}${r.guns.length > 4 ? '…' : ''}` : 'magazines only'];
+      if (r.pr) bits.unshift(`PR #${r.pr.number}${r.pr.user ? ' by ' + r.pr.user : ''}${r.pr.title ? ': ' + r.pr.title : ''}`);
       bits.push(r.replaces.length ? `replaces your ${r.replaces.map(l => l.file).join(', ')}` : 'new');
       if (rigJoints && r.joints && r.joints !== rigJoints) bits.push(`made for a ${r.joints}-joint hand, yours has ${rigJoints}`);
       sub.textContent = bits.join(' · ');
@@ -2191,7 +2229,8 @@ function showSyncDialog(repo) {
   };
   dlg.showModal();
 }
-$('btnSyncRepo').onclick = syncWithRepo;
+$('btnSyncRepo').onclick = () => syncWithRepo(false);
+$('btnSyncPRs').onclick = () => syncWithRepo(true);
 $('syncRepo').addEventListener('change', () => { const r = parseRepo($('syncRepo').value); if (r) { project.syncRepo = r; persist(); } });
 $('liveSync').onchange = () => {
   if ($('liveSync').checked) {

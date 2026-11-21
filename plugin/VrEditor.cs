@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using FistVR;
 using JerryGloves;
@@ -14,6 +15,7 @@ namespace GT3PoseKit
     {
         static readonly string[] VrGunSlots = { "IdleL", "IdleR", "ForeL", "ForeR", "FireStartL", "FireStartR", "FireEndL", "FireEndR", "MagReleaseL", "MagReleaseR" };
         static readonly string[] VrOtherSlots = { "IdleL", "IdleR" };
+        static readonly string[] VrMagSlots = { "IdleL", "IdleR", "RetainL", "RetainR" };
         static readonly System.Text.RegularExpressions.Regex RackRe =
             new System.Text.RegularExpressions.Regex("slide|bolt|handle|charg|pump|fore.?end|lever|crank|cock", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
@@ -46,6 +48,9 @@ namespace GT3PoseKit
             { "Fist",    new[] { new float[] { 88, 102, 72 }, new float[] { 30, 48, 40 }, null,                     new float[] { 38 } } },
             { "Point",   new[] { new float[] { 88, 102, 72 }, new float[] { 30, 48, 40 }, new float[] { 2, 4, 2 },  new float[] { 38 } } },
             { "Trigger", new[] { new float[] { 62, 78, 48 }, new float[] { 22, 38, 28 }, new float[] { 28, 46, 22 }, new float[] { 28 } } },
+            // Gesture defaults for the empty hand (negative curl straightens the thumb past the neutral hand).
+            { "Thumbs up", new[] { new float[] { 88, 102, 72 }, new float[] { -12, -18, -12 }, null,                   new float[] { 8 } } },
+            { "Finger gun", new[] { new float[] { 88, 102, 72 }, new float[] { -10, -12, -8 }, new float[] { 2, 4, 2 }, new float[] { 36 } } },
         };
 
         // ------------------------------------------------------------------ opening
@@ -157,7 +162,7 @@ namespace GT3PoseKit
                 group = ColPose;
                 add(null, "Capture hands", VrCapture);
                 add(null, "Reset", VrReset);
-                add(null, "Copy Idle", VrCopyIdle);
+                add("copyidle", "Copy Idle", () => { if (OnRetainSlot()) { _vrAdjustMag = !_vrAdjustMag; _vrMsg = _vrAdjustMag ? "Move and Turn now adjust the palmed magazine (hold two palmed magazines to see it)" : "Move and Turn now adjust the hand"; } else VrCopyIdle(); });
                 add(null, "Mirror L<>R", VrMirror);
                 add(null, "Clear slot", VrClear);
                 add(null, "Undo", VrUndoLast);
@@ -341,16 +346,18 @@ namespace GT3PoseKit
             if (sys == null) return null;
             bool phys;
             var src = PoseSource(sys, out phys);
-            r = VrRig.Build(BuildRig(left, src), sys.idlePose != null ? sys.idlePose.Fingers : null, left);
+            // GlovesTan3's own idle pose is the neutral hand, even while a custom empty-hand pose is on.
+            WithOriginalIdle(sys, () => { r = VrRig.Build(BuildRig(left, src), sys.idlePose != null ? sys.idlePose.Fingers : null, left); });
             _vrRigs[left] = r;
             return r;
         }
 
         List<string> VrTargets()
         {
-            var list = new List<string> { "gun" };
+            var list = new List<string>();
             if (_vrGun != null)
             {
+                list.Add("gun");
                 var parts = new List<FVRInteractiveObject>();
                 foreach (var io in _vrGun.GetComponentsInChildren<FVRInteractiveObject>(true))
                     if (IsPart(io, _vrGun.transform)) parts.Add(io);
@@ -363,14 +370,14 @@ namespace GT3PoseKit
                 if (FindPump(_vrGun.transform) != null) list.Add("pump");
             }
             if (_vrGun is FVRFireArm) list.Add("mag");
+            list.Add("empty"); // the glove when it holds nothing: needs no gun
             return list;
         }
 
-        string[] VrSlots() { return _vrTarget == "gun" ? VrGunSlots : VrOtherSlots; }
+        string[] VrSlots() { return _vrTarget == "gun" ? VrGunSlots : _vrTarget == "empty" ? EmptySlots : _vrTarget == "mag" ? VrMagSlots : VrOtherSlots; }
 
         void VrCycleTarget(int dir)
         {
-            if (!VrReady()) return;
             var t = VrTargets();
             int i = Math.Max(0, t.IndexOf(_vrTarget));
             _vrTarget = t[(i + dir + t.Count) % t.Count];
@@ -393,7 +400,8 @@ namespace GT3PoseKit
 
         bool VrReady()
         {
-            if (_vrGun == null || _vrSet == null) { _vrMsg = "Hold a gun, then press Use held gun"; return false; }
+            if (_vrTarget == "empty") return true;
+            if (_vrGun == null || _vrSet == null) { _vrMsg = "Hold a gun, then press Use held gun (or pick the Empty hand target)"; return false; }
             return true;
         }
 
@@ -401,6 +409,8 @@ namespace GT3PoseKit
 
         PoseData[] TargetArray(string target, bool create)
         {
+            if (target == "empty") return _empty.poses;
+            if (_vrSet == null) return null;
             if (target == "gun") return _vrSet.poses;
             if (target == "mag") return _vrSet.magazine.poses;
             if (target == "pump") return _vrSet.pump.poses;
@@ -411,6 +421,7 @@ namespace GT3PoseKit
 
         void SetTargetArray(string target, PoseData[] arr)
         {
+            if (target == "empty") { _empty.poses = arr; return; }
             if (target == "gun") { _vrSet.poses = arr; return; }
             if (target == "mag") { _vrSet.magazine.poses = arr; return; }
             if (target == "pump") { _vrSet.pump.poses = arr; return; }
@@ -453,6 +464,12 @@ namespace GT3PoseKit
         {
             var pd = GetSlot(_vrSlot);
             if (pd != null && pd.joints != null && pd.joints.Length == rig.n) return rig.ToLocal(pd);
+            if (_vrTarget == "empty")
+            {
+                // An unposed gesture starts from its built-in default (or GlovesTan3's idle for Idle).
+                var def = EmptyGesturePose(_vrSlot);
+                return def != null && def.joints != null && def.joints.Length == rig.n ? rig.ToLocal(def) : null;
+            }
             var idle = GetSlot("Idle" + (SideLeft ? "L" : "R"));
             if (idle != null && idle.joints != null && idle.joints.Length == rig.n) return rig.ToLocal(idle);
             if (allowCapture)
@@ -520,40 +537,44 @@ namespace GT3PoseKit
 
         void VrPreset(string name)
         {
+            Edit((rig, L) => { ApplyPreset(rig, L, name); return true; }, name + " preset");
+        }
+
+        // Sets every finger to a preset (relative to the neutral hand); the hand's position is kept.
+        static void ApplyPreset(VrRig rig, VrRig.Local L, string name)
+        {
             var p = VrPresets[name];
-            Edit((rig, L) =>
+            for (int role = 1; role <= 5; role++)
             {
-                for (int role = 1; role <= 5; role++)
+                var f = rig.fingers[role];
+                if (f == null) continue;
+                var curls = role == VrRig.Thumb ? p[1] : (role == VrRig.Index && p[2] != null ? p[2] : p[0]);
+                foreach (var j in f)
                 {
-                    var f = rig.fingers[role];
-                    if (f == null) continue;
-                    var curls = role == VrRig.Thumb ? p[1] : (role == VrRig.Index && p[2] != null ? p[2] : p[0]);
-                    foreach (var j in f)
+                    var k = rig.knuckle[j];
+                    int idx = k == "base" ? 0 : k == "mid" ? 1 : k == "tip" ? 2 : -1;
+                    var q = rig.restQ[j];
+                    if (idx >= 0)
                     {
-                        var k = rig.knuckle[j];
-                        int idx = k == "base" ? 0 : k == "mid" ? 1 : k == "tip" ? 2 : -1;
-                        var q = rig.restQ[j];
-                        if (idx >= 0)
-                        {
-                            if (role == VrRig.Thumb && k == "base") q = q * Quaternion.AngleAxis(p[3][0], rig.spreadAxis[j]);
-                            q = q * Quaternion.AngleAxis(curls[idx], rig.curlAxis[j]);
-                        }
-                        L.q[j] = q;
+                        if (role == VrRig.Thumb && k == "base") q = q * Quaternion.AngleAxis(p[3][0], rig.spreadAxis[j]);
+                        q = q * Quaternion.AngleAxis(curls[idx], rig.curlAxis[j]);
                     }
+                    L.q[j] = q;
                 }
-                return true;
-            }, name + " preset");
+            }
         }
 
         void VrMove(Vector3 dir)
         {
             float mm = VrSteps[_vrStepIndex];
+            if (OnRetainSlot() && _vrAdjustMag) { PalmedEdit(pm => pm.Pos += dir * (mm / 1000f), "Moved the palmed magazine " + mm + " mm"); return; }
             Edit((rig, L) => { L.rootP += dir * (mm / 1000f); return true; }, "Moved the hand " + mm + " mm");
         }
 
         void VrTurn(Vector3 axis, int sign)
         {
             float deg = VrSteps[_vrStepIndex] * sign;
+            if (OnRetainSlot() && _vrAdjustMag) { PalmedEdit(pm => pm.Euler = (Quaternion.AngleAxis(deg, axis) * Quaternion.Euler(pm.Euler)).eulerAngles, "Turned the palmed magazine " + deg + " deg"); return; }
             Edit((rig, L) =>
             {
                 Vector3[] wp; Quaternion[] wq;
@@ -564,6 +585,30 @@ namespace GT3PoseKit
                 L.rootP = pivot + dq * (L.rootP - pivot);
                 return true;
             }, "Turned the hand " + deg + " deg");
+        }
+
+        // On the magazine's Retention slot, Move / Turn / Clear slot can act on the palmed magazine instead of the hand.
+        bool _vrAdjustMag;
+        bool OnRetainSlot() { return _vrTarget == "mag" && _vrSlot.StartsWith("Retain"); }
+
+        void PalmedEdit(Action<PalmedMag> change, string done)
+        {
+            if (!VrReady()) return;
+            if (_vrSet.magazine == null) { _vrMsg = "This pose set has no magazine section yet: pose the magazine first"; return; }
+            var side = SideLeft ? "L" : "R";
+            PushUndo();
+            var pm = FindPalmed(_vrSet.magazine, side);
+            if (pm == null)
+            {
+                pm = new PalmedMag { side = side };
+                var list = new List<PalmedMag>(_vrSet.magazine.palmed ?? new PalmedMag[0]) { pm };
+                _vrSet.magazine.palmed = list.ToArray();
+            }
+            change(pm);
+            VrApply();
+            var e = pm.Euler; var p = pm.Pos * 1000f;
+            _vrMsg = done + string.Format("  (offset {0:0} {1:0} {2:0} mm, turn {3:0} {4:0} {5:0} deg)",
+                                          p.x, p.y, p.z, Mathf.DeltaAngle(0, e.x), Mathf.DeltaAngle(0, e.y), Mathf.DeltaAngle(0, e.z));
         }
 
         void VrReset()
@@ -605,6 +650,16 @@ namespace GT3PoseKit
         void VrClear()
         {
             if (!VrReady()) return;
+            if (OnRetainSlot() && _vrAdjustMag)
+            {
+                var side = SideLeft ? "L" : "R";
+                if (FindPalmed(_vrSet.magazine, side) == null) { _vrMsg = "The palmed magazine already sits where H3VR puts it"; return; }
+                PushUndo();
+                _vrSet.magazine.palmed = System.Array.FindAll(_vrSet.magazine.palmed, p => p != null && p.side != side);
+                VrApply();
+                _vrMsg = "The palmed magazine is back where H3VR puts it";
+                return;
+            }
             if (GetSlot(_vrSlot) == null) { _vrMsg = Pretty(_vrSlot) + " is already empty"; return; }
             PushUndo();
             RemoveSlot(_vrSlot);
@@ -617,6 +672,21 @@ namespace GT3PoseKit
         void VrCapture()
         {
             if (!VrReady()) return;
+            if (_vrTarget == "empty")
+            {
+                // Nothing to grip: start both hands from GlovesTan3's own idle pose.
+                PushUndo();
+                int n = 0;
+                foreach (var left in new[] { false, true })
+                {
+                    var pd = EmptyCapture(left, left ? "IdleL" : "IdleR");
+                    if (pd != null) { PutSlot(pd); n++; }
+                }
+                if (n == 0) { _vrUndo.RemoveAt(_vrUndo.Count - 1); _vrMsg = "Spawn the GlovesTan3 gloves first"; return; }
+                VrApply();
+                _vrMsg = "Both empty hands set to GlovesTan3's idle pose: now shape them";
+                return;
+            }
             PushUndo();
             var done = new List<string>();
             string bestTarget = null, bestSlot = null;
@@ -663,7 +733,10 @@ namespace GT3PoseKit
             else if (!string.IsNullOrEmpty(cap.partPath)) target = "part:" + cap.partPath;
             else target = "gun";
 
-            if (target != "gun") slot = "Idle" + side;
+            if (target == "mag")
+                // Holding two palmed magazines, or editing the Retention slot: capture into Retain.
+                slot = (HasPalmedPartner(held as FVRFireArmMagazine) || (_vrTarget == "mag" && _vrSlot == "Retain" + side)) ? "Retain" + side : "Idle" + side;
+            else if (target != "gun") slot = "Idle" + side;
             else if (cap.isSupport) slot = "Fore" + side; // free hand supporting a pistol: the support grip
             else if (cap.onForegrip) slot = GunHasPump() ? null : "Fore" + side;
             else if (_vrTarget == "gun" && _vrSlot.EndsWith(side) && !_vrSlot.StartsWith("Fore")) slot = _vrSlot; // keep e.g. Fire start
@@ -686,6 +759,7 @@ namespace GT3PoseKit
         // Capture for the current slot only (used when editing an empty slot).
         PoseData CaptureToTarget()
         {
+            if (_vrTarget == "empty") return EmptyCapture(SideLeft, _vrSlot);
             string target, slot, why;
             var pd = CaptureFor(SideLeft, out target, out slot, out why);
             if (pd == null || target != _vrTarget) { _vrMsg = "Grip the " + VrTargetLabel().ToLowerInvariant() + " with your " + (SideLeft ? "left" : "right") + " hand, or press Capture hands"; return null; }
@@ -693,24 +767,38 @@ namespace GT3PoseKit
             return pd;
         }
 
+        // Undo entries are tagged: "E" = the empty-hand poses, "G" = the gun's pose set.
         void PushUndo()
         {
-            _vrUndo.Add(JsonUtility.ToJson(_vrSet));
+            _vrUndo.Add(_vrTarget == "empty" ? "E" + JsonUtility.ToJson(_empty) : "G" + JsonUtility.ToJson(_vrSet));
             if (_vrUndo.Count > 60) _vrUndo.RemoveAt(0);
         }
 
         void VrUndoLast()
         {
             if (_vrUndo.Count == 0) { _vrMsg = "Nothing to undo"; return; }
-            _vrSet = JsonUtility.FromJson<PoseSet>(_vrUndo[_vrUndo.Count - 1]);
+            var entry = _vrUndo[_vrUndo.Count - 1];
             _vrUndo.RemoveAt(_vrUndo.Count - 1);
+            if (entry.StartsWith("E"))
+            {
+                _empty = JsonUtility.FromJson<EmptyHandSet>(entry.Substring(1));
+                _vrTarget = "empty";
+                if (Array.IndexOf(VrSlots(), _vrSlot) < 0) _vrSlot = "Idle" + (SideLeft ? "L" : "R");
+            }
+            else
+            {
+                _vrSet = JsonUtility.FromJson<PoseSet>(entry.Substring(1));
+                if (_vrTarget == "empty") _vrTarget = "gun";
+            }
             VrApply();
             _vrMsg = "Undone";
         }
 
         // Push the session to the game (no file write), exactly like the browser editor's Live sync.
+        // The empty-hand pose is put on the gloves every frame, so it only needs marking as changed.
         void VrApply()
         {
+            if (_vrTarget == "empty") { _emptyDirty = true; return; }
             _vrDirty = true;
             try { ApplyLive(_vrSet, false); }
             catch (Exception e) { _vrMsg = "Could not apply: " + e.Message; }
@@ -718,16 +806,34 @@ namespace GT3PoseKit
 
         void VrSave()
         {
-            if (!VrReady()) return;
-            try { ApplyLive(_vrSet, true); _vrDirty = false; _vrMsg = "Saved " + SafeFileName(_vrSet.name) + ".json"; }
-            catch (Exception e) { _vrMsg = "Could not save: " + e.Message; }
+            var saved = new List<string>();
+            if (_emptyDirty || _vrTarget == "empty")
+            {
+                try { SaveEmptyHand(); saved.Add("empty-hand.json"); }
+                catch (Exception e) { _vrMsg = "Could not save: " + e.Message; return; }
+            }
+            if (_vrSet != null && (_vrDirty || _vrTarget != "empty"))
+            {
+                try { ApplyLive(_vrSet, true); _vrDirty = false; saved.Add(SafeFileName(_vrSet.name) + ".json"); }
+                catch (Exception e) { _vrMsg = "Could not save: " + e.Message; return; }
+            }
+            _vrMsg = saved.Count > 0 ? "Saved " + string.Join(" and ", saved.ToArray()) : "Hold a gun, then press Use held gun";
         }
 
         void VrRevert()
         {
+            if (_vrTarget == "empty")
+            {
+                LoadEmptyHand();
+                _vrUndo.Clear();
+                _vrMsg = File.Exists(EmptyHandPath) ? "Empty hand reverted to the saved file" : "No saved empty-hand pose: back to GlovesTan3's own";
+                return;
+            }
             if (_vrGun == null) { _vrMsg = "Nothing to revert"; return; }
             var gun = _vrGun;
+            var keepEmpty = _empty; bool keepEmptyDirty = _emptyDirty;
             Reload(); // re-read the saved files, dropping unsaved live changes
+            _empty = keepEmpty; _emptyDirty = keepEmptyDirty; // the gun's revert leaves the empty hand alone
             _vrGun = null;
             _vrDirty = false;
             _vrGun = gun;
@@ -740,7 +846,7 @@ namespace GT3PoseKit
         // Give these poses to every firearm with a very similar name (same rule as the browser editor).
         void VrAutoCopy()
         {
-            if (!VrReady()) return;
+            if (_vrSet == null) { _vrMsg = "Hold a gun, then press Use held gun"; return; }
             var ids = new List<string>(_vrSet.match.itemIds ?? new string[0]);
             if (ids.Count == 0) { _vrMsg = "This pose set has no item ID"; return; }
             var added = new List<string>();
@@ -773,7 +879,8 @@ namespace GT3PoseKit
         {
             var side = slot.EndsWith("L") ? " L" : " R";
             var k = slot.Substring(0, slot.Length - 1);
-            return (k == "Fore" ? "Fore/Support" : k == "FireStart" ? "Fire start" : k == "FireEnd" ? "Fire end" : k == "MagRelease" ? "Mag release" : k) + side;
+            return (k == "Fore" ? "Fore/Support" : k == "FireStart" ? "Fire start" : k == "FireEnd" ? "Fire end" : k == "MagRelease" ? "Mag release"
+                    : k == "Retain" ? "Retention" : k == "ThumbsUp" ? "Thumbs up" : k == "FingerGun" ? "Finger gun" : k) + side;
         }
 
         string VrTargetLabel() { return LabelOf(_vrTarget); }
@@ -783,6 +890,7 @@ namespace GT3PoseKit
             if (target == "gun") return "Gun";
             if (target == "mag") return "Magazine";
             if (target == "pump") return "Pump";
+            if (target == "empty") return "Empty hand";
             var path = target.Substring(5);
             int slash = path.LastIndexOf('/');
             return (slash >= 0 ? path.Substring(slash + 1) : path).TrimStart('_');
@@ -801,7 +909,7 @@ namespace GT3PoseKit
             if (_vrLabels.TryGetValue("target", out t)) t.text = VrTargetLabel();
             if (_vrLabels.TryGetValue("slot", out t))
             {
-                bool set = _vrSet != null && GetSlot(_vrSlot) != null;
+                bool set = (_vrSet != null || _vrTarget == "empty") && GetSlot(_vrSlot) != null;
                 t.text = Pretty(_vrSlot) + (set ? " *" : "");
             }
             VrPaint paint;
@@ -819,14 +927,19 @@ namespace GT3PoseKit
             if (_vrPaints.TryGetValue("couple", out paint)) paint.Apply(_vrCoupleTip);
             if (_vrLabels.TryGetValue("step", out t)) t.text = "Step " + VrSteps[_vrStepIndex] + (VrSteps[_vrStepIndex] == 1 ? "" : "") + " deg/mm";
             if (_vrLabels.TryGetValue("couple", out t)) t.text = "Tip follows: " + (_vrCoupleTip ? "on" : "off");
-            if (_vrLabels.TryGetValue("save", out t)) t.text = _vrDirty ? "Save *" : "Save";
+            if (_vrLabels.TryGetValue("save", out t)) t.text = _vrDirty || _emptyDirty ? "Save *" : "Save";
             if (_vrLabels.TryGetValue("freeze", out t)) t.text = _freezeOn ? "Freeze gun: on" : "Freeze gun: off";
+            if (_vrLabels.TryGetValue("copyidle", out t)) t.text = OnRetainSlot() ? (_vrAdjustMag ? "Adjust: palmed mag" : "Adjust: hand") : "Copy Idle";
+            if (_vrPaints.TryGetValue("copyidle", out paint)) paint.Apply(OnRetainSlot() && _vrAdjustMag);
 
             if (_vrStatus != null)
             {
                 string gun = _vrSet != null ? _vrSet.name + (_vrSet.match != null && _vrSet.match.itemIds != null && _vrSet.match.itemIds.Length > 1 ? " (+" + (_vrSet.match.itemIds.Length - 1) + " guns)" : "") : "no gun";
                 _vrStatus.text = "PoseKit  |  " + gun + "  |  " + VrTargetLabel() + " / " + Pretty(_vrSlot)
-                                 + (_vrSet != null && GetSlot(_vrSlot) == null ? " (empty)" : "") + (_vrDirty ? "  |  unsaved" : "")
+                                 + (_vrTarget == "empty"
+                                     ? (GetSlot(_vrSlot) == null ? (_vrSlot.StartsWith("Idle") ? " (GlovesTan3's own)" : " (built-in default)") : "") + (_emptyEnabled.Value ? "" : " (turned off in config)")
+                                     : (_vrSet != null && GetSlot(_vrSlot) == null ? " (empty)" : ""))
+                                 + (_vrDirty || _emptyDirty ? "  |  unsaved" : "")
                                  + "\n" + (string.IsNullOrEmpty(_vrMsg) ? "Hold the gun with the slot's hand and press buttons with the other." : _vrMsg);
             }
         }

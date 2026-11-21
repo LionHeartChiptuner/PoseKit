@@ -22,7 +22,7 @@ GlovesTan3 drives the hand from a `HandPoseItem` placed as a direct child of the
    * click the square at the hand root to move or rotate the whole hand (`W` / `E`);
    * *Mirror from other hand*, *Copy pose from…*, and the *Trigger preview* slider (blends Fire start → Fire end like the mod does).
 5. Fill in the gun's **Item ID** (from the capture or the spawner). Then click **Export for game** and save the `.json` into `BepInEx/config/GlovesTan3Poses/`.
-6. In game press **PoseKit: Reload poses** (`F7`) and grab the gun again.
+6. In game press **PoseKit: Rescan Folders** (`F7`) and grab the gun again.
 
 ## VR editor (in game)
 
@@ -32,7 +32,7 @@ Everything can be done without leaving VR. Open the panel with the wrist menu bu
 
 | Row | Buttons |
 | --- | --- |
-| Target & slot | **◀ Target ▶**: Gun, then each grabbable part (slide, bolt, charging handle… racking parts first), then Magazine. **◀ Slot ▶**: Idle / Foregrip / Fire start / Fire end, L and R (parts and magazines have Idle only). A `*` on the slot means it has a pose. |
+| Target & slot | **◀ Target ▶**: Gun, then each grabbable part (slide, bolt, charging handle… racking parts first), then Magazine, then **Empty hand** (the glove when it holds nothing; see Empty hand). **◀ Slot ▶**: Idle / Foregrip / Fire start / Fire end, L and R (parts have Idle only; magazines have Idle and Retention). A `*` on the slot means it has a pose. |
 | Pose | **Capture hand** · **Reset** (neutral fingers) · **Copy Idle** · **Mirror L<>R** · **Clear slot** · **Undo** |
 | Presets | Open · Relaxed · Grip · Fist · Point · Trigger |
 | Finger | All (the four fingers) · Thumb · Index · Middle · Ring · Pinky |
@@ -79,7 +79,7 @@ What happens in game:
 * If slots were added or removed, its `HandPoseItem` is rebuilt, and any hand locked onto the old one is moved to the new one.
 * Objects that had no poses yet pick them up the next time you hold them.
 * Renaming the pose set is fine: anything sharing its item IDs or magazine types is updated.
-* Live updates that weren't saved last until the game restarts or you press **Reload poses**.
+* Live updates that weren't saved last until the game restarts or you press **Rescan Folders**.
 
 The bridge only accepts these updates from pages that send the `X-PoseKit` header, which browsers allow only after a CORS check. It only writes pose sets into the pose folder. Set `[Editor bridge] AllowLiveImport = false` to make it read-only.
 
@@ -91,6 +91,10 @@ The bridge only accepts these updates from pages that send the `X-PoseKit` heade
 * A review list shows every pose set. **New** ones are ticked. Ones that would **replace** a pose set you already have (same name or same guns) are left unticked, so your own edits aren't overwritten unless you choose to. Files that aren't valid pose sets are skipped.
 * **Download ticked** sends each one to the game like *Send to game*: it applies straight away and is saved into `GlovesTan3Poses`.
 * Unauthenticated GitHub requests are limited to 60 per hour; the editor says when the limit is reached.
+
+#### Test poses (pull requests)
+
+**Sync test poses (pull requests)**, under the sync button, does the same for poses that haven't been merged yet: it reads the repository's open pull requests (up to 30) and downloads the pose `.json` files each one adds or changes in the main folder, straight from that pull request's branch. Each row in the review list shows which PR it came from (number, author and title). The same ticking rule applies: new guns are ticked, ones that would replace your poses aren't. Test poses can still change before they're merged; sync the main repo again later to get the final versions. Pull requests whose fork was deleted are skipped. It only reads from GitHub. Each open pull request costs one extra request against GitHub's limit of 60 per hour.
 
 #### Update check when the game starts
 
@@ -200,6 +204,19 @@ The gun's **Mag release** slots (L/R) hold the pose for pressing the magazine re
 * **VR editor:** while the Mag release slot is selected, the gun you're holding shows that pose continuously, so you can see what you're editing.
 * Capture works as usual: select the Mag release slot, place your thumb, press **Capture hands**.
 
+### Retention reload (magazine)
+
+The magazine's **Retention** slots (L/R) hold the pose for carrying two magazines in one hand, for example the fresh magazine gripped normally and the spent one tucked against the palm with your little finger.
+
+* It needs **Mag palming** turned on in H3VR's options (Options → Guns). Then, while holding a magazine, grab a second one with the same hand and the two stack together.
+* While the held magazine has a second one palmed with it, the hand blends into this pose (0.1 s) and back when the stack splits.
+* GlovesTan3 has no slot for this, so PoseKit blends the magazine's Idle pose for that side, then restores it.
+* **VR editor:** choose the **Magazine** target, then the Retention slot with **◀ Slot ▶**. While it's selected, the magazine you're holding shows that pose continuously.
+* **Capture:** hold the two palmed magazines and press **Capture hands**. The capture goes to Retention automatically. The browser editor also picks Retention for a palmed capture.
+* A side with no Retention pose keeps its normal magazine pose.
+* **Where the palmed magazine sits:** H3VR puts the second magazine right beside the held one, at the same angle. You can move and turn it per hand. On the Retention slot, the **Copy Idle** button becomes **Adjust: hand / palmed mag**. With *palmed mag* selected, the **Move** and **Turn** rows move and turn the palmed magazine (in the held magazine's axes) instead of the hand, by the current step. **Clear slot** puts it back where H3VR puts it. Hold the two palmed magazines while you adjust to see the result live. It's saved with the pose set (`magazine.palmed` in the file).
+* **Ghost palmed magazine:** while a Retention slot is selected (with ghost hands on), a see-through copy of the magazine shows where the palmed magazine will sit, in a lighter shade of the hand's ghost colour. It updates as you move and turn it, and shows even before the Retention hand pose exists. It hides while a real magazine is palmed with the one you're posing on, since the real one already shows the spot.
+
 ### Support grip (pistols and other guns without a foregrip)
 
 On guns with no foregrip, the **Fore / Support** slot is the two-handed support grip. It follows H3VR's own two-handed stabilization:
@@ -246,6 +263,55 @@ Choose **Magazine** in the picker. These poses are used whenever you hold a matc
 * Load a magazine's model from the game link (category *Magazine*, or *Load a compatible magazine's model*). You can also capture while holding one.
 
 In game, the loader adds a `HandPoseItem` under the slide or handle's `FVRInteractiveObject.GameObject`, or under the magazine. That is exactly where GlovesTan3 looks when you grab it.
+
+### Empty hand
+
+Your own poses for the glove when it's holding nothing, in place of GlovesTan3's built-in idle hand. They switch with what your hand does on the controller, blending over a few hundredths of a second:
+
+| Gesture | When |
+| --- | --- |
+| **Idle** | grip not pressed |
+| **Grip** (a fist) | grip pressed, finger on the trigger, thumb resting on the stick, pad or buttons |
+| **Point** | grip pressed, finger off the trigger, thumb resting |
+| **Thumbs up** | grip pressed, finger on the trigger, thumb lifted |
+| **Finger gun** | grip pressed, finger off the trigger, thumb lifted |
+
+"Finger on the trigger" uses trigger touch where the controller has it (Index, Quest/Rift), otherwise a slight pull. "Thumb resting" uses stick, pad or face-button touch, or finger tracking on Index controllers. A grip press near an object still grabs it as normal.
+
+They're made in the VR editor (not the browser editor yet), and need no gun:
+
+1. Open the VR editor and press **Target ▶** until it shows **Empty hand**. Without a gun held, it's the only target.
+2. Pick a gesture and hand with **◀ Slot ▶** (Idle, Grip, Point, Thumbs up, Finger gun; L and R). While you edit a slot, that hand shows it whatever your fingers do, so you can see it.
+3. Shape it with presets, finger controls and the move/turn rows. **Capture hands** sets both Idle slots to GlovesTan3's own idle pose to start from.
+4. **Save** writes `empty-hand.json` in the pose folder. **Clear slot** goes back to that slot's default, and **Revert** goes back to the saved file.
+
+A gesture you haven't posed uses a built-in default (fist, point, thumbs up, finger gun) made from your Idle pose, shown as "built-in default" on the panel. An Idle you haven't posed is GlovesTan3's own idle pose.
+
+The feature turns on for a hand as soon as any of its empty-hand slots has a pose. From then on that hand shows these poses instead of GlovesTan3's physics hand, so it no longer curls and opens freely with your grip and trigger when empty (its fingers still push things). Clear every slot for that hand to get the physics hand back, or turn it off without deleting anything with `[Empty hand] Enabled` in `gt3posekit.loader.cfg`.
+
+### Glove skins
+
+Put a new material on the GlovesTan3 gloves, for example one painted in Substance 3D Painter. The gloves use the Alloy/Core shader with a base colour and a normal map, but their packed map (Metal(R) AO(G) Spec(B) Rough(A)) is empty, which is why they look flat. PoseKit swaps in a new material instead of editing GlovesTan3's.
+
+A skin is a folder in `GlovesTan3Poses/skins/<name>/`. Choose it with `[Glove skin] Skin` in `gt3posekit.loader.cfg`, or cycle through skins with the wrist menu button **PoseKit: Next glove skin**. **PoseKit: Rescan Folders** re-reads the files, so you can export again and reload without restarting.
+
+There are two ways to make a skin:
+
+1. **Texture files (no Unity needed).** PNG or JPG files, recognised by name:
+
+   | Name contains | Map |
+   |---|---|
+   | `basecolor`, `albedo`, `diffuse` | base colour |
+   | `packed`, `alloy`, `materialmap` | Alloy packed map: R metallic, G AO, B specularity, A roughness |
+   | `normal` | normal map (OpenGL / Unity style) |
+   | `emission`, `emissive` | emission |
+
+   PoseKit builds a new material that starts as a copy of the glove's own (same shader and settings) and replaces whichever maps you provide. A folder with just a packed map gives the stock gloves their missing metal, AO, specularity and roughness, and keeps the original colour and normals. Add `"fresh": true` to `skin.json` to start from the shader's defaults instead. An optional `skin.json` sets a different shader, a tint, the normal strength, extra shader values or keywords. `skins/README.txt` describes it.
+2. **A ready-made material.** Build an asset bundle in Unity 5.6 containing your material and its shader, and put it in the folder as `*.bundle`, `*.assetbundle` or a file named `skin`. PoseKit uses that material as it is.
+
+**Skins from other mods.** Skin makers can release skins as their own mod. They put them in a folder named `GlovesTanSkins`, one subfolder per skin (same contents as above), for example `GlovesTanSkins/Camo/camo.bundle` at the root of their Thunderstore zip. PoseKit finds every `GlovesTanSkins` folder under `BepInEx/plugins` when the game starts, when you press **PoseKit: Rescan Folders**, and with the wrist button **PoseKit: Search for glove skins**, which also says how many skins it found and from which mods. They then show up in **Next glove skin** by their subfolder name. If two skins share a name, the mod's folder name is added in brackets. The skin mod needs no code, but players need PoseKit to wear the skins. The skin bundles shouldn't also be set up for OtherLoader, because Unity can't load one bundle twice.
+
+When the gloves first appear, PoseKit writes `skins/glove-material.txt`, listing GlovesTan3's own shader and texture slots. `skins/applied-material.txt` lists the material the current skin actually put on the gloves. Each time a skin is applied, the BepInEx log says which slot each texture went into, or which maps the shader has no slot for.
 
 ## File formats
 

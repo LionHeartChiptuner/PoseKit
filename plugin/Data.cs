@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 // All data classes are plain [Serializable] types so Unity's JsonUtility can read and write them.
@@ -91,6 +91,21 @@ namespace GT3PoseKit
         public string[] itemIds = new string[0];
         public string[] magazineTypes = new string[0];
         public PoseData[] poses;
+        public PalmedMag[] palmed = new PalmedMag[0];   // where the palmed magazine sits during a retention reload
+    }
+
+    // The palmed (second) magazine during a retention reload, per hand. H3VR stacks it beside the held magazine
+    // with the same rotation; this moves it (p, metres, in the held magazine's axes) and turns it (e, degrees,
+    // Euler angles relative to the held magazine).
+    [Serializable]
+    public class PalmedMag
+    {
+        public string side = "R";
+        public float[] p = new float[3];
+        public float[] e = new float[3];
+
+        public Vector3 Pos { get { return p != null && p.Length >= 3 ? new Vector3(p[0], p[1], p[2]) : Vector3.zero; } set { p = new[] { value.x, value.y, value.z }; } }
+        public Vector3 Euler { get { return e != null && e.Length >= 3 ? new Vector3(e[0], e[1], e[2]) : Vector3.zero; } set { e = new[] { value.x, value.y, value.z }; } }
     }
 
     // ---------- Rig dump: the GlovesTan3 hand skeleton ----------
@@ -273,11 +288,12 @@ namespace GT3PoseKit
         public bool isPump;          // the hand held the gun's pump (partXf is then the pump's frame)
         public bool isSupport;       // free hand gripping near the hand holding the gun (two-handed support grip)
         [NonSerialized] public FistVR.FVRPhysicalObject source; // the object captured on (not saved)
-        public string partPath;      // set when the hand held a sub-part (slide, bolt handle…)
+        public string partPath;      // set when the hand held a sub-part (slide, bolt handleâ€¦)
         public string partType;
         public Xf partXf;            // that part's frame in gun space at capture time
         public string magazineType;  // set when the held object is a magazine
         public bool isMagazine;
+        public bool magPalmed;      // a second magazine is palmed with it (retention reload)
         public Xf handRoot;          // hand root frame, gun space
         public Xf[] joints;          // every joint, gun space
         public RigHand rig;
