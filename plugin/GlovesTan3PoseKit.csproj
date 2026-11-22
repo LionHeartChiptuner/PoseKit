@@ -49,6 +49,8 @@
     <Reference Include="0Harmony"><HintPath>$(BepInExDir)\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="GlovesTan3"><HintPath>$(BepInExDir)\plugins\JerryAr-GlovesTan3\GlovesTan3.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Sodalite"><HintPath>$(BepInExDir)\plugins\nrgill28-Sodalite\Sodalite.dll</HintPath><Private>false</Private></Reference>
+    <!-- Needed to build, optional to play: only H3MPGloveSync.cs uses it, and only when H3MP is loaded. -->
+    <Reference Include="H3MP"><HintPath>$(BepInExDir)\plugins\VIP-H3MP\H3MP.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
   <!-- Clear error instead of hundreds of "type not found" errors when the paths aren't set. -->
@@ -57,6 +59,8 @@
            Text="H3VR not found. Set GameDir to the folder containing h3vr.exe (copy local.props.example to local.props)." />
     <Error Condition="!Exists('$(BepInExDir)\plugins\JerryAr-GlovesTan3\GlovesTan3.dll')"
            Text="GlovesTan3 not found under $(BepInExDir)\plugins. Set ProfileDir to your mod profile folder (the one containing BepInEx), with GlovesTan3 and Sodalite installed." />
+    <Error Condition="!Exists('$(BepInExDir)\plugins\VIP-H3MP\H3MP.dll')"
+           Text="H3MP not found under $(BepInExDir)\plugins. Install VIP-H3MP in that profile: it's needed to build PoseKit (not to play)." />
   </Target>
 
 </Project>

@@ -814,7 +814,7 @@ namespace GT3PoseKit
             }
             if (_vrSet != null && (_vrDirty || _vrTarget != "empty"))
             {
-                try { ApplyLive(_vrSet, true); _vrDirty = false; saved.Add(SafeFileName(_vrSet.name) + ".json"); }
+                try { ApplyLive(_vrSet, true); _vrDirty = false; saved.Add(PoseFileName(_vrSet.name)); }
                 catch (Exception e) { _vrMsg = "Could not save: " + e.Message; return; }
             }
             _vrMsg = saved.Count > 0 ? "Saved " + string.Join(" and ", saved.ToArray()) : "Hold a gun, then press Use held gun";

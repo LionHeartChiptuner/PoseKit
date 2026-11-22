@@ -531,12 +531,12 @@ namespace GT3PoseKit
             string saved = "";
             if (save)
             {
-                saved = Path.Combine(_dir, SafeFileName(key) + ".json");
+                saved = Path.Combine(_dir, PoseFileName(key));
                 File.WriteAllText(saved, JsonUtility.ToJson(set, true));
             }
             Logger.LogInfo("Live update '" + key + "': " + updated + " updated, " + rebuilt + " rebuilt, " + removed + " removed" + (save ? ", saved to " + saved : ""));
             return "{\"ok\":true,\"key\":\"" + Esc(key) + "\",\"updated\":" + updated + ",\"rebuilt\":" + rebuilt + ",\"removed\":" + removed +
-                   ",\"saved\":\"" + Esc(saved) + "\"}";
+                   ",\"saved\":\"" + Esc(saved == "" ? "" : Path.GetFileName(saved)) + "\"}";
         }
 
         // True when two sets target the same gun or magazines (e.g. the set was renamed in the editor).
@@ -1193,6 +1193,17 @@ namespace GT3PoseKit
             Logger.LogInfo("Capture written: " + file);
         }
 
+        // A pose set's name comes from its file (maybe someone else's): it must not land on PoseKit's own files.
+        static string PoseFileName(string key)
+        {
+            var name = SafeFileName(key);
+            switch (name.ToLowerInvariant())
+            {
+                case "empty-hand": case "rig": case "glove": name = "poses-" + name; break;
+            }
+            return name + ".json";
+        }
+
         static string SafeFileName(string s)
         {
             if (string.IsNullOrEmpty(s)) s = "object";
@@ -1267,7 +1278,7 @@ namespace GT3PoseKit
                 if (set == null || set.format != "gt3poses") { status = 400; json = ModelServer.Err("Expected a gt3poses pose set"); return; }
                 bool save = q.TryGetValue("save", out v) && (v == "1" || v == "true");
                 try { json = ApplyLive(set, save); }
-                catch (Exception e) { status = 400; json = ModelServer.Err(e.Message); }
+                catch (Exception e) { Logger.LogWarning("Editor pose update failed: " + e.Message); status = 400; json = ModelServer.Err(e.Message); }
                 return;
             }
             switch (path)
@@ -1278,8 +1289,7 @@ namespace GT3PoseKit
                         version = Version,
                         items = IM.OD != null ? IM.OD.Count : 0,
                         gloves = FindSystem(true) != null || FindSystem(false) != null,
-                        freeze = _freezeOn,
-                        poseFolder = _dir
+                        freeze = _freezeOn
                     });
                     return;
 

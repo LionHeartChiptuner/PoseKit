@@ -139,65 +139,26 @@ namespace GT3PoseKit
 
         class Fetched { public string text, error; public bool done; }
 
-        // Unity's WWW first; if that can't connect (old Mono/Unity TLS), Windows' own curl.exe, which does TLS 1.2+.
+        // Reads a GitHub URL with Unity's own WWW. Text only: the pose files are JSON data, never code.
         IEnumerator Fetch(string url, Fetched result)
         {
-            if (!_useCurl)
+            WWW www = null;
+            try
             {
-                WWW www = null;
-                try
-                {
-                    var headers = new Dictionary<string, string> { { "Accept", "application/vnd.github+json" }, { "User-Agent", "GT3PoseKit" } };
-                    try { www = new WWW(url, null, headers); }
-                    catch { www = new WWW(url); }
-                }
-                catch (Exception e) { result.error = e.Message; }
-                if (www != null)
-                {
-                    yield return www;
-                    if (string.IsNullOrEmpty(www.error) && !string.IsNullOrEmpty(www.text)) { result.text = www.text; result.done = true; yield break; }
-                    result.error = www.error;
-                    // A real HTTP answer (e.g. 403 rate limit, 404) won't get better through curl.
-                    if (!string.IsNullOrEmpty(www.error) && System.Text.RegularExpressions.Regex.IsMatch(www.error, @"^\s*[45]\d\d")) { result.done = true; yield break; }
-                }
-                _useCurl = true;
-                Logger.LogInfo("Pose repo: Unity couldn't connect (" + result.error + "), using Windows curl.exe instead");
+                var headers = new Dictionary<string, string> { { "Accept", "application/vnd.github+json" }, { "User-Agent", "GT3PoseKit" } };
+                try { www = new WWW(url, null, headers); }
+                catch { www = new WWW(url); }
             }
-
-            string text = null, error = null; bool finished = false;
-            var thread = new System.Threading.Thread(() =>
+            catch (Exception e) { result.error = e.Message; }
+            if (www != null)
             {
-                try
-                {
-                    var psi = new System.Diagnostics.ProcessStartInfo("curl.exe",
-                        "-sSfL --max-time 20 -A GT3PoseKit -H \"Accept: application/vnd.github+json\" \"" + url.Replace("\"", "") + "\"")
-                    {
-                        UseShellExecute = false, CreateNoWindow = true,
-                        RedirectStandardOutput = true, RedirectStandardError = true,
-                        StandardOutputEncoding = Encoding.UTF8,
-                    };
-                    using (var p = System.Diagnostics.Process.Start(psi))
-                    {
-                        string err = null;
-                        var errThread = new System.Threading.Thread(() => { err = p.StandardError.ReadToEnd(); });
-                        errThread.Start();
-                        text = p.StandardOutput.ReadToEnd();
-                        p.WaitForExit();
-                        errThread.Join();
-                        if (p.ExitCode != 0) { error = "curl: " + (err ?? "").Trim(); text = null; }
-                    }
-                }
-                catch (Exception e) { error = "curl.exe not available: " + e.Message; }
-                finished = true;
-            }) { IsBackground = true };
-            thread.Start();
-            while (!finished) yield return null;
-            result.text = text;
-            result.error = text != null ? null : error;
+                yield return www;
+                if (string.IsNullOrEmpty(www.error) && !string.IsNullOrEmpty(www.text)) result.text = www.text;
+                else result.error = string.IsNullOrEmpty(www.error) ? "empty response" : www.error;
+                www.Dispose();
+            }
             result.done = true;
         }
-
-        bool _useCurl;
 
         Dictionary<string, PoseSet> LocalPoseFiles()
         {
@@ -227,7 +188,7 @@ namespace GT3PoseKit
                 if (up.conflict && !replaceMine) { kept++; continue; }
                 try
                 {
-                    string target = SafeFileName(up.key) + ".json";
+                    string target = PoseFileName(up.key);
                     // Set your own versions aside first (never deleted), so the repo set is the only one for that gun.
                     foreach (var name in up.overlapping)
                     {

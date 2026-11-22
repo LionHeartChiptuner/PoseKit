@@ -55,14 +55,14 @@ A slot that's empty when you press an editing button starts from Idle, or else f
 
 ## Loading models from H3VR
 
-While the game is running, the plugin serves data to the editor on `http://127.0.0.1:48261` (localhost only, read-only).
+While the game is running, the plugin serves data to the editor on `http://127.0.0.1:48261` (this PC only, and only to the editor page it serves).
 
 1. Start H3VR, then open the editor in your default browser in one of these ways:
    * the wrist menu button **PoseKit: Open editor**, or `F10`;
    * set `[Editor bridge] OpenEditorOnStart = true` to have it open by itself when the game starts;
    * or go to **http://127.0.0.1:48261/** yourself, in any browser (Firefox, Chrome, Edge).
 
-    The plugin serves the editor itself, and it connects to the game automatically. Use this rather than opening `editor/index.html` from disk: browsers usually block pages opened from disk from reaching the game ("Could not reach H3VR"). The editor file on disk still works for offline editing and file import/export.
+    The plugin serves the editor itself, and it connects to the game automatically. Use this rather than opening `editor/index.html` from disk: the game refuses every other page, including the editor opened from disk. The editor file on disk still works for editing and file import/export without the game link.
 2. Search any item the game knows about, including modded guns from OtherLoader, and click **Load**. The plugin loads its prefab without spawning it and sends back the model and markers. If the pose set has no Item ID yet, it's set too.
 3. **Get rig** pulls the GlovesTan3 skeleton. **Capture L / R** captures whatever that hand is holding. Both need the gloves spawned.
 
@@ -81,7 +81,7 @@ What happens in game:
 * Renaming the pose set is fine: anything sharing its item IDs or magazine types is updated.
 * Live updates that weren't saved last until the game restarts or you press **Rescan Folders**.
 
-The bridge only accepts these updates from pages that send the `X-PoseKit` header, which browsers allow only after a CORS check. It only writes pose sets into the pose folder. Set `[Editor bridge] AllowLiveImport = false` to make it read-only.
+The bridge only accepts requests from the editor page it serves. Other websites can't read from it or send to it, and it never sends folder paths. It only writes pose sets into the pose folder, and a pose set can't take the name of PoseKit's own files there. Set `[Editor bridge] AllowLiveImport = false` to make it read-only.
 
 ### Sync with GitHub repo
 
@@ -124,7 +124,7 @@ Without the link, **PoseKit: Export held model** (`F9`) writes `GlovesTan3Poses/
 Notes:
 
 * If Chrome asks to let the page access devices on your local network, allow it, since that is how it reaches the game.
-* To change the port, edit `[Editor bridge] Port` in `gt3posekit.loader.cfg` and enter the same port next to **Connect**. Set `Enabled = false` to turn the bridge off.
+* To change the port, edit `[Editor bridge] Port` in `gt3posekit.loader.cfg` and open the editor again with **PoseKit: Open editor** (or at `http://127.0.0.1:<port>/`). Set `Enabled = false` to turn the bridge off.
 
 ## Auto copy to similar guns
 

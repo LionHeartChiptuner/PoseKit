@@ -28,7 +28,7 @@ See **[docs/USAGE.md](docs/USAGE.md)** for the full guide.
 Requirements:
 
 * the [.NET SDK](https://dotnet.microsoft.com/download) (6 or newer); no NuGet packages are downloaded
-* H3VR, and a mod profile (e.g. r2modman) with **BepInExPack_H3VR**, **Sodalite** and **GlovesTan3** installed. The build references their DLLs from your install; none of them are included in this repo.
+* H3VR, and a mod profile (e.g. r2modman) with **BepInExPack_H3VR**, **Sodalite**, **GlovesTan3** and **H3MP** (needed to build, optional to play) installed. The build references their DLLs from your install; none of them are included in this repo.
 
 1. Copy `plugin/local.props.example` to `plugin/local.props` and set:
    * `GameDir`: the folder containing `h3vr.exe`
@@ -52,7 +52,8 @@ Copy the DLL into `<ProfileDir>\BepInEx\plugins\PoseKit\` and start the game thr
 
 * **Pose sets** are JSON files in `BepInEx/config/GlovesTan3Poses/`. When you grab a matching gun, the plugin builds GlovesTan3 `HandPoseItem`s from them and attaches each one where GlovesTan3 looks: under the gun, under each part's `FVRInteractiveObject.GameObject`, under the pump, or under the magazine.
 * Each frame, the plugin also points every glove at the poses attached to what its hand is actually holding, because GlovesTan3 otherwise keeps the poses it picked when the grab started.
-* The **editor bridge** is a small HTTP server on `127.0.0.1` only. It serves the editor, item models, the hand rig and glove, and captures. It accepts pose updates only from pages that send its custom header. The game's own TLS stack is too old for GitHub, so repo sync runs in the browser.
+* The **editor bridge** is a small HTTP server on `127.0.0.1` only. It serves the editor, item models, the hand rig and glove, and captures. It only answers the editor page it serves: no CORS, Origin and Host checks, a custom header on every data request, and a Content-Security-Policy on the page.
+* **Internet use:** at game start the plugin reads the pose repository from GitHub (pose JSON only, nothing is uploaded) and asks before changing any pose files. Turn this off with `[Pose repo] CheckOnStart = false`. It starts no other programs, apart from opening the editor in your browser. The editor loads three.js from jsDelivr and can sync poses from GitHub.
 
 ## License
 

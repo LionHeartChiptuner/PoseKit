@@ -6,7 +6,7 @@
   <PropertyGroup>
     <!-- Folder containing h3vr.exe -->
     <GameDir>C:\Program Files (x86)\Steam\steamapps\common\H3VR</GameDir>
-    <!-- Mod profile folder containing BepInEx\ (with GlovesTan3 and Sodalite installed) -->
+    <!-- Mod profile folder containing BepInEx\ (with GlovesTan3, Sodalite and H3MP installed) -->
     <ProfileDir>$(APPDATA)\r2modmanPlus-local\H3VR\profiles\Default</ProfileDir>
   </PropertyGroup>
 </Project>

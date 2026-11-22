@@ -272,7 +272,6 @@ namespace GT3PoseKit
         public int items;
         public bool gloves;
         public bool freeze;
-        public string poseFolder;
     }
 
     [Serializable]

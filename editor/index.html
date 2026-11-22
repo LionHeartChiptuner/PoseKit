@@ -991,6 +991,10 @@ function triggerBlend(side, t) {
   };
 }
 
+// Names come from pose files (including other people's), mods and GitHub: never put them in HTML unescaped.
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
 function targetLabel(t = target) {
   if (t === 'gun') return 'Gun';
   if (t === 'mag') return 'Magazine';
@@ -1010,12 +1014,12 @@ function refreshTargets() {
     html += '<optgroup label="Grabbable parts (racking)">';
     for (const g of geoParts) {
       const p = project.parts.find(x => x.path === g.path);
-      html += `<option value="${partKey(g.path).replace(/"/g, '&quot;')}">${g.name}${g.type ? ' · ' + g.type : ''}${mark(p?.poses)}</option>`;
+      html += `<option value="${esc(partKey(g.path))}">${esc(g.name)}${g.type ? ' · ' + esc(g.type) : ''}${mark(p?.poses)}</option>`;
     }
     html += '</optgroup>';
   }
   const pi = pumpInfo();
-  if (pi || has(project.pump.poses)) html += `<option value="pump">Pump${pi ? ' · ' + pi.type : ''}${mark(project.pump.poses)}</option>`;
+  if (pi || has(project.pump.poses)) html += `<option value="pump">Pump${pi ? ' · ' + esc(pi.type) : ''}${mark(project.pump.poses)}</option>`;
   html += `<option value="mag">Magazine${mark(project.mag.poses)}</option>`;
   sel.innerHTML = html;
   sel.value = target;
@@ -1086,7 +1090,7 @@ function refreshSlots() {
     if (t === target) continue;
     for (const s of targetSlots(t)) if (SIDE(s) === SIDE(activeSlot) && TP(t)[s]) opts.push([`${t}|${s}`, `${targetLabel(t)} · ${s}`]);
   }
-  sel.innerHTML = '<option value="">Copy pose from…</option>' + opts.map(([v, l]) => `<option value="${v.replace(/"/g, '&quot;')}">${l}</option>`).join('');
+  sel.innerHTML = '<option value="">Copy pose from…</option>' + opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
   $('btnMirror').disabled = !dict[OTHER(activeSlot)];
   refreshTargets();
   scheduleGhost(); // the selected target/slot changed: the in-game ghost follows
@@ -1115,7 +1119,7 @@ addEventListener('pointerup', () => { if (ctlDragging) { ctlDragging = false; re
 function ctlRow(container, label, cls, range, read, write) {
   const row = document.createElement('div');
   row.className = 'f ' + cls;
-  row.innerHTML = `<span title="${label}">${label}</span><input type="range" min="${range[0]}" max="${range[1]}" step="0.5"><output></output>`;
+  row.innerHTML = `<span title="${esc(label)}">${esc(label)}</span><input type="range" min="${range[0]}" max="${range[1]}" step="0.5"><output></output>`;
   const input = row.querySelector('input'), out = row.querySelector('output');
   input.addEventListener('pointerdown', () => { ctlDragging = true; pushUndo(); });
   input.addEventListener('keydown', e => { if (e.key.startsWith('Arrow') || e.key.startsWith('Page')) pushUndo(); });
@@ -1234,7 +1238,7 @@ function refreshFingers() {
         const nm = (f.isThumb && ji.knuckle === 'base') ? 'Base' : KNUCKLE_LABEL[ji.knuckle];
         const sub = document.createElement('div');
         sub.className = 'knuckle';
-        sub.innerHTML = `<button class="link" title="Select ${rig.joints[i].name}">${nm}</button>`;
+        sub.innerHTML = `<button class="link" title="Select ${esc(rig.joints[i].name)}">${esc(nm)}</button>`;
         sub.querySelector('button').onclick = () => select({ side, index: i });
         body.append(sub);
         const rng = a => project.limitRange ? lim[a] : (a === 'curl' ? [-60, 130] : [-90, 90]);
@@ -1354,8 +1358,8 @@ function refreshSelection() {
   const pose = curPose(false) || restPose(selected.side);
   const isRoot = selected.index < 0;
   const ji = isRoot ? null : RIG[selected.side].info.jointInfo[selected.index];
-  $('selInfo').innerHTML = (isRoot ? `<b>Hand root</b> (${rig.rootName || 'Hand'})`
-    : `<b>${rig.joints[selected.index].name}</b> · ${ji ? `${ji.finger.label} ${KNUCKLE_LABEL[ji.knuckle].toLowerCase()}` : 'joint ' + selected.index}`)
+  $('selInfo').innerHTML = (isRoot ? `<b>Hand root</b> (${esc(rig.rootName || 'Hand')})`
+    : `<b>${esc(rig.joints[selected.index].name)}</b> · ${ji ? `${esc(ji.finger.label)} ${KNUCKLE_LABEL[ji.knuckle].toLowerCase()}` : 'joint ' + selected.index}`)
     + (gizmoMode === 'move' ? ' · the gizmo moves the whole hand' : gizmoMode === 'turn' ? ' · the whole hand turns around this point' : '');
   const k = s => `<span class="kbd">${s}</span>`;
   $('kbdHint').innerHTML = isRoot || gizmoMode === 'move'
@@ -1461,7 +1465,7 @@ function renderMarkers() {
   box.innerHTML = '';
   ms.forEach((m, i) => {
     const d = document.createElement('div');
-    d.innerHTML = `<span title="${m.name}">${m.name}</span><button>Move hand here</button>`;
+    d.innerHTML = `<span title="${esc(m.name)}">${esc(m.name)}</span><button>Move hand here</button>`;
     d.querySelector('button').onclick = () => {
       pushUndo();
       const pose = curPose();
@@ -1580,7 +1584,7 @@ function renderSimilar() {
   const shown = simRows.filter(r => r.score >= min);
   for (const r of shown) {
     const d = document.createElement('div');
-    d.innerHTML = `<label class="check" style="margin:0;flex:1 1 auto;min-width:0"><input type="checkbox"${r.on ? ' checked' : ''}><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.item.id}${r.item.mod ? ' · mod' : ''}">${r.item.name || r.item.id}</span></label><span class="sub" style="margin:0;flex:0 0 auto">${r.score.toFixed(2)} ~ ${r.to}</span>`;
+    d.innerHTML = `<label class="check" style="margin:0;flex:1 1 auto;min-width:0"><input type="checkbox"${r.on ? ' checked' : ''}><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.item.id)}${r.item.mod ? ' · mod' : ''}">${esc(r.item.name || r.item.id)}</span></label><span class="sub" style="margin:0;flex:0 0 auto">${r.score.toFixed(2)} ~ ${esc(r.to)}</span>`;
     d.querySelector('input').onchange = e => { r.on = e.target.checked; };
     box.append(d);
   }
@@ -1741,7 +1745,7 @@ function importCapture(c, fname) {
     const capTarget = c.isMagazine ? 'mag' : c.isPump ? 'pump' : c.partPath ? partKey(c.partPath) : 'gun';
     const where = c.isMagazine ? ` holding magazine (${c.magazineType})` : c.isPump ? ` on the pump (${c.partType})` : c.partPath ? ` gripping ${c.partPath.split('/').pop()} (${c.partType})` : c.isSupport ? ' supporting the shooting hand' : c.onForegrip ? ' on the foregrip' : '';
     $('capInfo').textContent = `${c.itemId || c.objectName} · ${side === 'L' ? 'left' : 'right'} hand${where}${c.fromPhysics ? ' · from physical fingers' : ''} · ${c.joints.length} joints · ${(c.geo?.meshes || []).length} meshes`;
-    $('capSlot').innerHTML = targetSlots(capTarget).filter(s => SIDE(s) === side).map(s => `<option>${s}</option>`).join('');
+    $('capSlot').innerHTML = targetSlots(capTarget).filter(s => SIDE(s) === side).map(s => `<option>${esc(s)}</option>`).join('');
     $('capSlot').value = (c.onForegrip && capTarget === 'gun' ? 'Fore' : c.isMagazine && c.magPalmed ? 'Retain' : 'Idle') + side;
     $('capGeo').checked = !!c.geo;
     const matchList = c.isMagazine ? project.mag.itemIds : project.itemIds;
@@ -1909,21 +1913,19 @@ function applyModel(m) {
 }
 
 const game = { items: [], connected: false };
-// Opened from the game itself (http://127.0.0.1:<port>/)? Then talk to the same origin: no CORS or
-// local-network permission is involved, which is the most reliable way to connect.
+// The game only accepts the editor page it serves itself (http://127.0.0.1:<port>/), never other origins.
 const SERVED_BY_GAME = /^https?:$/.test(location.protocol) && /^(127\.0\.0\.1|localhost)$/.test(location.hostname) && !!location.port;
-const gameUrl = path => SERVED_BY_GAME && +$('gPort').value === +location.port
-  ? path
-  : `http://127.0.0.1:${+$('gPort').value || 48261}${path}`;
+const onGameOrigin = () => SERVED_BY_GAME && (+$('gPort').value || 48261) === +location.port;
 function unreachable() {
   const port = +$('gPort').value || 48261;
-  return SERVED_BY_GAME
+  return onGameOrigin()
     ? 'Could not reach H3VR. Is the game still running?'
-    : `Could not reach H3VR. If the game is running, open http://127.0.0.1:${port}/ in Chrome or Edge instead of this file. Browsers often block files on disk from talking to the game.`;
+    : `The game only accepts the editor it serves itself. Press PoseKit: Open editor in game, or open http://127.0.0.1:${port}/ while the game is running.`;
 }
 async function gameGet(path) {
   let res;
-  try { res = await fetch(gameUrl(path), { cache: 'no-store' }); }
+  if (!onGameOrigin()) throw new Error(unreachable());
+  try { res = await fetch(path, { cache: 'no-store', headers: { 'X-PoseKit': '1' } }); }
   catch { throw new Error(unreachable()); }
   let body = null;
   try { body = await res.json(); } catch { /* empty or invalid body */ }
@@ -1947,7 +1949,7 @@ async function connectGame() {
     $('freezeOn').checked = !!st.freeze;
     setGameStatus(`Connected · ${game.items.length} items${st.gloves ? ' · gloves spawned' : ' · gloves not spawned'}`, true);
     const cats = [...new Set(game.items.map(i => i.cat))].sort();
-    $('gCat').innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option${c === 'Firearm' ? ' selected' : ''}>${c}</option>`).join('');
+    $('gCat').innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option${c === 'Firearm' ? ' selected' : ''}>${esc(c)}</option>`).join('');
     $('gPanel').classList.remove('hidden');
     renderGameList();
     refreshTargets();
@@ -1988,8 +1990,9 @@ async function loadGameModel(it, btn) {
 }
 async function gamePost(path, body) {
   let res;
+  if (!onGameOrigin()) throw new Error(unreachable());
   try {
-    res = await fetch(gameUrl(path), {
+    res = await fetch(path, {
       method: 'POST', cache: 'no-store',
       headers: { 'Content-Type': 'application/json', 'X-PoseKit': '1' },
       body: JSON.stringify(body),
